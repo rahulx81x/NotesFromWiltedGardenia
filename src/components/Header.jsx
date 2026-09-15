@@ -39,9 +39,10 @@ export default function Header({ petalsEnabled = true, setPetalsEnabled = () => 
               title={petalsEnabled ? "Hide drifting gardenia petals" : "Show drifting gardenia petals"}
               aria-label="Toggle drifting gardenia petals"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                {/* Soft rounded gardenia petal icon */}
-                <path d="M12 21C7 19 4 14 5 9C6 4 10 3 12 3C14 3 18 4 19 9C20 14 17 19 12 21Z" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                {/* Slender gardenia petal icon with midrib */}
+                <path d="M12 21.5C12 21.5 6.5 16.5 6.5 10C6.5 5.5 9 2.5 12 2.5C15 2.5 17.5 5.5 17.5 10C17.5 16.5 12 21.5 12 21.5Z" />
+                <path d="M12 20.5V9" opacity="0.65" />
               </svg>
               <span className="btn-hint-label">Petals</span>
             </button>

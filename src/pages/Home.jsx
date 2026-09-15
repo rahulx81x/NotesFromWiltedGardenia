@@ -29,7 +29,7 @@ export default function Home() {
       {/* Atmospheric Prologue / Epigraph */}
       <section className="epigraph-banner" aria-label="Epigraph">
         <div className="epigraph-ornament">
-          <GardeniaEmblem size={30} />
+          <GardeniaEmblem size={22} />
         </div>
         <blockquote className="epigraph-text">
           “A petal pressed into parchment does not preserve the flower; it only marks where silence once bloomed.”
@@ -40,7 +40,7 @@ export default function Home() {
       </section>
 
       {/* Latest Notes Section */}
-      <section aria-labelledby="latest-notes-heading" style={{ marginTop: "3rem" }}>
+      <section aria-labelledby="latest-notes-heading">
         <div className="section-heading-group">
           <div>
             <span className="section-eyebrow">Digital Archive</span>
