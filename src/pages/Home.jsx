@@ -4,6 +4,9 @@ import { useAnthologies } from "../data/useAnthologies";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import NoteCard from "../components/NoteCard";
 import AnthologyCard from "../components/AnthologyCard";
+import OnThisDay from "../components/OnThisDay";
+import RecentlyRead from "../components/RecentlyRead";
+import StartHere from "../components/StartHere";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import PetalDivider from "../components/PetalDivider";
@@ -40,6 +43,15 @@ export default function Home() {
           <span>From the Curator’s Desk · Notes between Midnight & Dawn</span>
         </div>
       </section>
+
+      {/* Curated Start Here Pathway (for first-time readers) */}
+      <StartHere poems={poems} />
+
+      {/* Recently Read Shelf (for returning readers) */}
+      <RecentlyRead poems={poems} />
+
+      {/* On This Day Anniversary Section (if matches exist) */}
+      <OnThisDay poems={poems} />
 
       {/* Latest Notes Section */}
       <section aria-labelledby="latest-notes-heading">

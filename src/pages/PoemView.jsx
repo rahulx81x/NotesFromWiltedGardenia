@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
 import { DEFAULT_AUTHOR } from "../data/config";
+import { useBookmarks } from "../hooks/useBookmarks";
+import { useReadingHistory } from "../hooks/useReadingHistory";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount, getReadMinutes } from "../utils/poemHelpers";
+import { getRelatedPoems } from "../utils/relatedPoems";
+import { exportPoemImage } from "../utils/exportPoemImage";
+import NoteCard from "../components/NoteCard";
 import LoadingState from "../components/LoadingState";
 import PetalDivider from "../components/PetalDivider";
 import GardeniaEmblem from "../components/GardeniaEmblem";
@@ -11,16 +16,26 @@ import GardeniaEmblem from "../components/GardeniaEmblem";
 export default function PoemView() {
   const { id } = useParams();
   const { poems, loading } = usePoems();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
+  const { recordRead } = useReadingHistory();
 
   const [fontSizeLevel, setFontSizeLevel] = useState("normal"); // 'small' | 'normal' | 'large'
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [shareFeedback, setShareFeedback] = useState(null); // null | 'copied' | 'shared'
+  const [isExporting, setIsExporting] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
   const currentIndex = poems.findIndex((p) => p.id === id);
   const poem = currentIndex !== -1 ? poems[currentIndex] : null;
 
   useDocumentTitle(poem?.name);
+
+  // Record read in local device history on view
+  useEffect(() => {
+    if (poem?.id) {
+      recordRead(poem.id);
+    }
+  }, [poem?.id, recordRead]);
 
   // Scroll to top and reset state on poem change
   useEffect(() => {
@@ -74,6 +89,17 @@ export default function PoemView() {
   // Metrics
   const stanzas = getStanzaCount(poem.contents);
   const readMinutes = getReadMinutes(poem.contents);
+  const relatedPoems = getRelatedPoems(poem, poems, 3);
+
+  const handleExportImage = async () => {
+    if (!poem || isExporting) return;
+    setIsExporting(true);
+    try {
+      await exportPoemImage(poem);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const sharePoem = async () => {
     const url = `${window.location.origin}/poem/${poem.id}`;
@@ -147,6 +173,35 @@ export default function PoemView() {
                 <path d="M3 12h1m16 0h1M12 3v1m0 16v1" />
               </svg>
               <span>{isFocusMode ? "Focusing" : "Focus"}</span>
+            </button>
+
+            {/* Bookmark Note */}
+            <button
+              onClick={() => toggleBookmark(poem.id)}
+              className={`tool-btn text-btn ${isBookmarked(poem.id) ? "active" : ""}`}
+              title={isBookmarked(poem.id) ? "Remove bookmark (saved locally)" : "Bookmark this note (saved locally)"}
+              aria-label={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note"}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill={isBookmarked(poem.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>{isBookmarked(poem.id) ? "Saved" : "Save"}</span>
+            </button>
+
+            {/* Export as Image Card */}
+            <button
+              onClick={handleExportImage}
+              disabled={isExporting}
+              className="tool-btn text-btn"
+              title="Export note excerpt as an image card"
+              aria-label="Export note as image card"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <span>{isExporting ? "Saving…" : "Card"}</span>
             </button>
 
             {/* Share Piece */}
@@ -264,6 +319,29 @@ export default function PoemView() {
             )}
           </div>
         </nav>
+
+        {/* Kindred Notes (Connected by Shared Themes) */}
+        {relatedPoems.length > 0 && (
+          <div className="kindred-notes-wrapper">
+            <PetalDivider className="poem-terminal-divider" />
+            <section className="kindred-notes-section" aria-labelledby="kindred-notes-heading">
+              <div className="section-heading-group">
+                <div>
+                  <span className="section-eyebrow">Echoes & Resonances</span>
+                  <h2 id="kindred-notes-heading" className="section-title">
+                    Kindred Notes
+                  </h2>
+                </div>
+                <span className="section-meta-hint">Connected by shared themes</span>
+              </div>
+              <div className="recent-notes-list">
+                {relatedPoems.map((rp, idx) => (
+                  <NoteCard key={rp.id} poem={rp} index={idx} />
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
       </article>
     </>
   );

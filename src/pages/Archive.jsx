@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
-import { DEFAULT_AUTHOR } from "../data/config";
+import { DEFAULT_AUTHOR, MOOD_MAP } from "../data/config";
+import { useBookmarks } from "../hooks/useBookmarks";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount } from "../utils/poemHelpers";
 import LoadingState from "../components/LoadingState";
@@ -13,11 +14,14 @@ const MAX_CARD_TAGS = 5;
 
 export default function Archive() {
   const { poems, loading, error } = usePoems();
+  const { bookmarks, isBookmarked, toggleBookmark } = useBookmarks();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTag = searchParams.get("tag") || "all";
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState("all");
+  const [activeMood, setActiveMood] = useState("all");
+  const [onlyBookmarked, setOnlyBookmarked] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
 
   useDocumentTitle("Archive of Standalone Notes");
@@ -91,9 +95,20 @@ export default function Archive() {
         (Array.isArray(poem.tags) &&
           poem.tags.some((t) => t.toLowerCase() === activeTag.toLowerCase()));
 
-      return matchesYear && matchesQuery && matchesTag;
+      const matchesBookmark = !onlyBookmarked || isBookmarked(poem.id);
+
+      const matchesMood =
+        activeMood === "all" ||
+        (Array.isArray(poem.tags) &&
+          poem.tags.some((t) =>
+            (MOOD_MAP[activeMood] || []).some(
+              (mt) => mt.toLowerCase() === t.toLowerCase()
+            )
+          ));
+
+      return matchesYear && matchesQuery && matchesTag && matchesBookmark && matchesMood;
     });
-  }, [poems, searchTerm, selectedYear, activeTag]);
+  }, [poems, searchTerm, selectedYear, activeTag, onlyBookmarked, activeMood, isBookmarked]);
 
   const togglePreview = (e, poemId) => {
     e.preventDefault();
@@ -114,7 +129,7 @@ export default function Archive() {
         </p>
       </header>
 
-      {/* Controls: Search, Year, and Dynamic Tags from CSV */}
+      {/* Controls: Search, Year, Bookmark Toggle, Mood & Dynamic Tags */}
       <div className="archive-controls-bar">
         <div className="search-input-wrapper">
           <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -159,28 +174,80 @@ export default function Archive() {
           </select>
         )}
 
-        {/* Dynamic Themes/Tags Filter Chips from Notes CSV */}
-        {availableTags.length > 0 && (
-          <div className="archive-tag-chips" aria-label="Filter by themes">
-            <span className="chips-label">Themes:</span>
-            <button
-              onClick={() => handleTagChange("all")}
-              className={`tag-chip ${activeTag === "all" ? "active" : ""}`}
-            >
-              All Themes
-            </button>
-            {availableTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => handleTagChange(tag)}
-                className={`tag-chip ${activeTag.toLowerCase() === tag.toLowerCase() ? "active" : ""}`}
-              >
-                #{tag}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Bookmarked Only Toggle */}
+        <button
+          type="button"
+          onClick={() => setOnlyBookmarked((prev) => !prev)}
+          className={`archive-bookmark-filter-btn ${onlyBookmarked ? "active" : ""}`}
+          title="Filter by bookmarked notes (stored on this device)"
+          aria-pressed={onlyBookmarked}
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill={onlyBookmarked ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>Bookmarked {bookmarks.length > 0 ? `(${bookmarks.length})` : ""}</span>
+        </button>
       </div>
+
+      {/* Device Storage Note for Bookmarks */}
+      {onlyBookmarked && (
+        <p className="archive-local-notice">
+          Showing notes bookmarked on this device · Local only
+        </p>
+      )}
+
+      {/* Mood / Emotional Bucket Chips */}
+      {Object.keys(MOOD_MAP).length > 0 && (
+        <div className="archive-mood-chips" aria-label="Filter by mood">
+          <span className="chips-label">Mood:</span>
+          <button
+            onClick={() => setActiveMood("all")}
+            className={`mood-chip ${activeMood === "all" ? "active" : ""}`}
+          >
+            All Moods
+          </button>
+          {Object.keys(MOOD_MAP).map((mood) => (
+            <button
+              key={mood}
+              onClick={() => setActiveMood((prev) => (prev === mood ? "all" : mood))}
+              className={`mood-chip ${activeMood === mood ? "active" : ""}`}
+            >
+              {mood}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Dynamic Themes/Tags Filter Chips from Notes CSV */}
+      {availableTags.length > 0 && (
+        <div className="archive-tag-chips" aria-label="Filter by themes">
+          <span className="chips-label">Themes:</span>
+          <button
+            onClick={() => handleTagChange("all")}
+            className={`tag-chip ${activeTag === "all" ? "active" : ""}`}
+          >
+            All Themes
+          </button>
+          {availableTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => handleTagChange(tag)}
+              className={`tag-chip ${activeTag.toLowerCase() === tag.toLowerCase() ? "active" : ""}`}
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <LoadingState count={5} />
@@ -189,12 +256,14 @@ export default function Archive() {
       ) : filteredPoems.length === 0 ? (
         <div className="empty-results">
           <p>No notes found matching your criteria.</p>
-          {(searchTerm || selectedYear !== "all" || activeTag !== "all") && (
+          {(searchTerm || selectedYear !== "all" || activeTag !== "all" || onlyBookmarked || activeMood !== "all") && (
             <button
               onClick={() => {
                 setSearchTerm("");
                 setSelectedYear("all");
                 handleTagChange("all");
+                setOnlyBookmarked(false);
+                setActiveMood("all");
               }}
               className="clear-filters-link"
             >
@@ -276,6 +345,30 @@ export default function Archive() {
                   </span>
 
                   <div className="archive-item-actions">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleBookmark(poem.id);
+                      }}
+                      className={`archive-row-bookmark-btn ${isBookmarked(poem.id) ? "active" : ""}`}
+                      title={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note (saved locally)"}
+                      aria-label={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note"}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill={isBookmarked(poem.id) ? "currentColor" : "none"}
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </button>
                     <button
                       onClick={(e) => togglePreview(e, poem.id)}
                       className="preview-toggle-btn"

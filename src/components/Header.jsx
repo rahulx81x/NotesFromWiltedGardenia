@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import GardeniaEmblem from "./GardeniaEmblem";
+import { useContent } from "../context/useContent";
 
 export default function Header({ petalsEnabled = true, setPetalsEnabled = () => {} }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { poems = [], loading = false } = useContent();
+
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("wilted_gardenia_theme") || "light";
   });
@@ -14,6 +19,19 @@ export default function Header({ petalsEnabled = true, setPetalsEnabled = () => 
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
+
+  const handleRandomPoem = () => {
+    if (!poems || poems.length === 0) return;
+    const currentId = location.pathname.startsWith("/poem/")
+      ? location.pathname.split("/")[2]
+      : null;
+    const candidates = poems.filter((p) => p.id !== currentId);
+    const pool = candidates.length > 0 ? candidates : poems;
+    const randomPick = pool[Math.floor(Math.random() * pool.length)];
+    if (randomPick?.id) {
+      navigate(`/poem/${randomPick.id}`);
+    }
   };
 
   return (
@@ -45,6 +63,23 @@ export default function Header({ petalsEnabled = true, setPetalsEnabled = () => 
                 <path d="M12 20.5V9" opacity="0.65" />
               </svg>
               <span className="btn-hint-label">Petals</span>
+            </button>
+
+            {/* Random Note / Surprise Me Toggle */}
+            <button
+              onClick={handleRandomPoem}
+              disabled={loading || !poems.length}
+              className="random-poem-btn"
+              title="Surprise me with a random note"
+              aria-label="Surprise me with a random note"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 3h5v5" />
+                <path d="M4 20L21 3" />
+                <path d="M21 16v5h-5" />
+                <path d="M15 15l6 6" />
+                <path d="M4 4l5 5" />
+              </svg>
             </button>
 
             {/* Reading Theme Toggle */}

@@ -29,3 +29,38 @@ export const FALLBACK_POEMS = [
 
 export const FALLBACK_ANTHOLOGIES = [
 ];
+
+/**
+ * Mood / emotional theme buckets mapping broad sentiments to poem tags.
+ */
+export const MOOD_MAP = {
+  "Heartbreak & Longing": ["heartbreak", "longing", "separation", "regret", "sorrow", "loss", "grief", "melancholy"],
+  "Love & Devotion": ["love", "romance", "devotion", "admiration", "tenderness", "passion", "affection"],
+  "Solitude & Introspection": ["solitude", "introspection", "insomnia", "silence", "night", "midnight", "shadows", "quiet"],
+  "Resilience & Hope": ["resilience", "hope", "determination", "empowerment", "healing", "dawn", "renewal", "strength"],
+  "Memory & Ephemera": ["memory", "nostalgia", "time", "decay", "autumn", "winter", "petals", "leaves", "fragrance"],
+};
+
+/**
+ * Curated "Start Here" reading path for first-time arrivals.
+ * Format: array of { id, note } objects
+ */
+export const START_HERE_IDS = [
+  {
+    id: "note-1",
+    note: "An introductory contemplation on silence, bruised parchment, and memory.",
+  },
+  {
+    id: "note-2",
+    note: "Where words brush against the solitary cadence of nightfall.",
+  },
+  {
+    id: "note-3",
+    note: "The central motif piece of things left unsaid.",
+  },
+  {
+    id: "note-4",
+    note: "A late-night observation preserved beneath candlelight.",
+  },
+];
+
