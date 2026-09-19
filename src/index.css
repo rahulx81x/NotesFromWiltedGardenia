@@ -1031,6 +1031,20 @@ input, select {
   font-weight: 500;
 }
 
+.archive-mini-tag.tag-more,
+.note-tag-pill.tag-more {
+  cursor: default;
+  opacity: 0.85;
+  font-style: italic;
+  font-size: 0.68rem;
+}
+
+.archive-mini-tag.tag-more:hover {
+  color: var(--ink-muted);
+  border-color: var(--border-delicate);
+  background: var(--bg-hover);
+}
+
 /* Note Card Tag Pills */
 .note-card-tags {
   display: flex;

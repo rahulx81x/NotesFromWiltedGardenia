@@ -66,7 +66,7 @@ class RainAmbience {
       try {
         this.noiseNode.stop();
         this.noiseNode.disconnect();
-      } catch (e) {
+      } catch {
         // ignore
       }
       this.noiseNode = null;

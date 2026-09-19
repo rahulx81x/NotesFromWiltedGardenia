@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { ContentProvider } from "./context/ContentContext";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import FloatingPetals from "./components/FloatingPetals";
@@ -24,7 +25,8 @@ export default function App() {
   };
 
   return (
-    <div className="app-wrapper">
+    <ContentProvider>
+      <div className="app-wrapper">
       {/* Background antique botanical gardenia engraving watermark */}
       <GardeniaBackgroundMotif />
 
@@ -68,5 +70,6 @@ export default function App() {
 
       <Footer />
     </div>
+    </ContentProvider>
   );
 }

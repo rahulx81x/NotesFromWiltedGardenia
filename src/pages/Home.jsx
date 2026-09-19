@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
 import { useAnthologies } from "../data/useAnthologies";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import NoteCard from "../components/NoteCard";
 import AnthologyCard from "../components/AnthologyCard";
 import LoadingState from "../components/LoadingState";
@@ -9,8 +10,9 @@ import PetalDivider from "../components/PetalDivider";
 import GardeniaEmblem from "../components/GardeniaEmblem";
 
 export default function Home() {
+  useDocumentTitle();
   const { poems, loading: poemsLoading, error: poemsError, isUsingFallback: poemsFallback } = usePoems();
-  const { anthologies, loading: anthologiesLoading, error: anthologiesError } = useAnthologies();
+  const { anthologies, loading: anthologiesLoading } = useAnthologies();
 
   const recentPoems = poems.slice(0, 4);
   const featuredAnthology = anthologies && anthologies.length > 0 ? anthologies[0] : null;

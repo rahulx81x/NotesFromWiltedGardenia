@@ -1,11 +1,17 @@
 import { Link } from "react-router-dom";
 import GardeniaEmblem from "./GardeniaEmblem";
+import { DEFAULT_AUTHOR } from "../data/config";
+import { getStanzaCount } from "../utils/poemHelpers";
+
+const MAX_CARD_TAGS = 5;
 
 export default function NoteCard({ poem, index = 0 }) {
   const { id, name, intro, publish_date, contents } = poem;
 
-  // Calculate approximate stanza count
-  const stanzas = contents ? contents.trim().split(/\n\s*\n/).filter(Boolean).length : 1;
+  const stanzas = getStanzaCount(contents);
+  const tags = poem.tags || [];
+  const visibleTags = tags.slice(0, MAX_CARD_TAGS);
+  const hiddenCount = tags.length - visibleTags.length;
 
   return (
     <article
@@ -25,7 +31,7 @@ export default function NoteCard({ poem, index = 0 }) {
             </time>
           )}
           <span className="meta-separator">·</span>
-          <span className="note-card-author">{poem.author || "Rahul Gouri"}</span>
+          <span className="note-card-author">{poem.author || DEFAULT_AUTHOR}</span>
           <span className="meta-separator">·</span>
           <span className="note-card-stanzas">
             {stanzas} {stanzas === 1 ? "Stanza" : "Stanzas"}
@@ -35,13 +41,21 @@ export default function NoteCard({ poem, index = 0 }) {
         <h2 className="note-card-title">{name}</h2>
         {intro && <p className="note-card-intro">{intro}</p>}
 
-        {poem.tags && poem.tags.length > 0 && (
+        {tags.length > 0 && (
           <div className="note-card-tags">
-            {poem.tags.map((tag) => (
+            {visibleTags.map((tag) => (
               <span key={tag} className="note-tag-pill">
                 #{tag}
               </span>
             ))}
+            {hiddenCount > 0 && (
+              <span
+                className="note-tag-pill tag-more"
+                title={`+${hiddenCount} more: ${tags.slice(MAX_CARD_TAGS).map((t) => `#${t}`).join(", ")}`}
+              >
+                +{hiddenCount}
+              </span>
+            )}
           </div>
         )}
 

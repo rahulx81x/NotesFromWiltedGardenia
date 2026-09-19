@@ -1,30 +1,29 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
+import { DEFAULT_AUTHOR } from "../data/config";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { getStanzaCount } from "../utils/poemHelpers";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import GardeniaEmblem from "../components/GardeniaEmblem";
 
+const MAX_VISIBLE_TAGS = 10;
+const MAX_CARD_TAGS = 5;
+
 export default function Archive() {
   const { poems, loading, error } = usePoems();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tagFromUrl = searchParams.get("tag");
+  const activeTag = searchParams.get("tag") || "all";
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState("all");
-  const [activeTag, setActiveTag] = useState(tagFromUrl || "all");
   const [expandedId, setExpandedId] = useState(null);
 
-  // Sync if URL query param changes
-  useEffect(() => {
-    if (tagFromUrl) {
-      setActiveTag(tagFromUrl);
-    }
-  }, [tagFromUrl]);
+  useDocumentTitle("Archive of Standalone Notes");
 
   const handleTagChange = (tag) => {
     const nextTag = activeTag.toLowerCase() === tag.toLowerCase() ? "all" : tag;
-    setActiveTag(nextTag);
     const newParams = new URLSearchParams(searchParams);
     if (nextTag === "all") {
       newParams.delete("tag");
@@ -34,18 +33,33 @@ export default function Archive() {
     setSearchParams(newParams, { replace: true });
   };
 
-  // Dynamically extract all unique tags from the CSV notes (semicolon-separated)
+  // Limit tag filter chips to top-used tags by frequency
   const availableTags = useMemo(() => {
-    const tagSet = new Set();
+    const counts = new Map();
     poems.forEach((p) => {
       if (Array.isArray(p.tags)) {
-        p.tags.forEach((tag) => {
-          if (tag) tagSet.add(tag);
+        p.tags.forEach((t) => {
+          if (t) counts.set(t, (counts.get(t) || 0) + 1);
         });
       }
     });
-    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [poems]);
+
+    const topTags = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, MAX_VISIBLE_TAGS)
+      .map(([tag]) => tag);
+
+    // If activeTag isn't in top 10 list, still display it as an active chip
+    if (
+      activeTag &&
+      activeTag !== "all" &&
+      !topTags.some((t) => t.toLowerCase() === activeTag.toLowerCase())
+    ) {
+      topTags.push(activeTag);
+    }
+
+    return topTags;
+  }, [poems, activeTag]);
 
   // Extract available years
   const availableYears = useMemo(() => {
@@ -202,9 +216,10 @@ export default function Archive() {
             const previewLines = poem.contents
               ? poem.contents.trim().split("\n").slice(0, 4).join("\n")
               : "";
-            const stanzas = poem.contents
-              ? poem.contents.trim().split(/\n\s*\n/).filter(Boolean).length
-              : 1;
+            const stanzas = getStanzaCount(poem.contents);
+            const tags = poem.tags || [];
+            const visibleTags = tags.slice(0, MAX_CARD_TAGS);
+            const hiddenCount = tags.length - visibleTags.length;
 
             return (
               <div
@@ -222,16 +237,16 @@ export default function Archive() {
                       <span className="archive-item-title">{poem.name}</span>
                     </Link>
                     <div className="archive-item-subline">
-                      <span className="archive-item-author">By {poem.author || "Rahul Gouri"}</span>
+                      <span className="archive-item-author">By {poem.author || DEFAULT_AUTHOR}</span>
                       {poem.intro && (
                         <>
                           <span className="meta-separator">·</span>
                           <span className="archive-item-intro-preview">{poem.intro}</span>
                         </>
                       )}
-                      {poem.tags && poem.tags.length > 0 && (
+                      {tags.length > 0 && (
                         <div className="archive-item-tags">
-                          {poem.tags.map((tag) => (
+                          {visibleTags.map((tag) => (
                             <button
                               key={tag}
                               type="button"
@@ -246,6 +261,14 @@ export default function Archive() {
                               #{tag}
                             </button>
                           ))}
+                          {hiddenCount > 0 && (
+                            <span
+                              className="archive-mini-tag tag-more"
+                              title={`+${hiddenCount} more: ${tags.slice(MAX_CARD_TAGS).map((t) => `#${t}`).join(", ")}`}
+                            >
+                              +{hiddenCount}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>

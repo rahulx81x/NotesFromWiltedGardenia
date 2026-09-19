@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Ambient floating Gardenia Petals
@@ -8,9 +8,21 @@ import { useEffect, useRef } from "react";
  */
 export default function FloatingPetals({ enabled = true }) {
   const canvasRef = useRef(null);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
 
   useEffect(() => {
-    if (!enabled) return;
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || prefersReducedMotion) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -27,6 +39,21 @@ export default function FloatingPetals({ enabled = true }) {
     };
 
     window.addEventListener("resize", handleResize);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      } else {
+        if (!animationFrameId) {
+          animationFrameId = requestAnimationFrame(render);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Poetic, sparse drift: 5-7 petals max for quiet contemplation
     const petalCount = Math.min(7, Math.max(4, Math.floor(window.innerWidth / 280)));
@@ -223,11 +250,14 @@ export default function FloatingPetals({ enabled = true }) {
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      cancelAnimationFrame(animationFrameId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
-  }, [enabled]);
+  }, [enabled, prefersReducedMotion]);
 
-  if (!enabled) return null;
+  if (!enabled || prefersReducedMotion) return null;
 
   return (
     <canvas

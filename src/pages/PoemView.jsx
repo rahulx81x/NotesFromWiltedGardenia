@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
+import { DEFAULT_AUTHOR } from "../data/config";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { getStanzaCount, getReadMinutes } from "../utils/poemHelpers";
 import LoadingState from "../components/LoadingState";
 import PetalDivider from "../components/PetalDivider";
 import GardeniaEmblem from "../components/GardeniaEmblem";
@@ -11,8 +14,13 @@ export default function PoemView() {
 
   const [fontSizeLevel, setFontSizeLevel] = useState("normal"); // 'small' | 'normal' | 'large'
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState(null); // null | 'copied' | 'shared'
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  const currentIndex = poems.findIndex((p) => p.id === id);
+  const poem = currentIndex !== -1 ? poems[currentIndex] : null;
+
+  useDocumentTitle(poem?.name);
 
   // Scroll to top and reset state on poem change
   useEffect(() => {
@@ -41,9 +49,6 @@ export default function PoemView() {
     );
   }
 
-  const currentIndex = poems.findIndex((p) => p.id === id);
-  const poem = currentIndex !== -1 ? poems[currentIndex] : null;
-
   if (!poem) {
     return (
       <div className="poem-reader-view" style={{ textAlign: "center", padding: "4rem 1rem" }}>
@@ -67,16 +72,25 @@ export default function PoemView() {
   const nextPoem = currentIndex > 0 ? poems[currentIndex - 1] : null; // Later date
 
   // Metrics
-  const stanzas = poem.contents ? poem.contents.trim().split(/\n\s*\n/).filter(Boolean).length : 1;
-  const wordCount = poem.contents ? poem.contents.trim().split(/\s+/).length : 0;
-  const readMinutes = Math.max(1, Math.round(wordCount / 120));
+  const stanzas = getStanzaCount(poem.contents);
+  const readMinutes = getReadMinutes(poem.contents);
 
-  const copyPoem = () => {
-    const textToCopy = `${poem.name}\nBy ${poem.author || "Rahul Gouri"}\n${poem.publish_date ? `[${poem.publish_date}]\n` : ""}\n${poem.contents}\n\n— Notes from a Wilted Gardenia`;
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2400);
-    });
+  const sharePoem = async () => {
+    const url = `${window.location.origin}/poem/${poem.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: poem.name, text: poem.intro || "", url });
+        setShareFeedback("shared");
+        setTimeout(() => setShareFeedback(null), 2400);
+      } catch {
+        // ignore user-cancelled share (AbortError)
+      }
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setShareFeedback("copied");
+        setTimeout(() => setShareFeedback(null), 2400);
+      });
+    }
   };
 
   return (
@@ -135,17 +149,21 @@ export default function PoemView() {
               <span>{isFocusMode ? "Focusing" : "Focus"}</span>
             </button>
 
-            {/* Copy Piece */}
+            {/* Share Piece */}
             <button
-              onClick={copyPoem}
-              className="tool-btn text-btn copy-btn"
-              title="Copy poem to clipboard"
+              onClick={sharePoem}
+              className="tool-btn text-btn share-btn"
+              title="Share piece or copy link"
+              aria-label={shareFeedback === "copied" ? "Link copied" : shareFeedback === "shared" ? "Shared" : "Share"}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
               </svg>
-              <span>{copied ? "Copied" : "Copy"}</span>
+              <span>{shareFeedback === "copied" ? "Link copied" : shareFeedback === "shared" ? "Shared" : "Share"}</span>
             </button>
           </div>
         </div>
@@ -159,7 +177,7 @@ export default function PoemView() {
               </time>
             )}
             <span className="meta-separator">·</span>
-            <span className="poem-author">By {poem.author || "Rahul Gouri"}</span>
+            <span className="poem-author">By {poem.author || DEFAULT_AUTHOR}</span>
             <span className="meta-separator">·</span>
             <span className="poem-read-time">
               {stanzas} {stanzas === 1 ? "stanza" : "stanzas"} · ~{readMinutes} min read
@@ -186,7 +204,7 @@ export default function PoemView() {
 
         {/* Poet Attribution Signature */}
         <div className="poem-author-signature">
-          <span className="sig-author">— {poem.author || "Rahul Gouri"}</span>
+          <span className="sig-author">— {poem.author || DEFAULT_AUTHOR}</span>
           {poem.publish_date && <span className="sig-date">{poem.publish_date}</span>}
         </div>
 

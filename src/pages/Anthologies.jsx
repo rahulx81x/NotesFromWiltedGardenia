@@ -1,4 +1,5 @@
 import { useAnthologies } from "../data/useAnthologies";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import AnthologyCard from "../components/AnthologyCard";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -6,6 +7,7 @@ import GardeniaEmblem from "../components/GardeniaEmblem";
 import PetalDivider from "../components/PetalDivider";
 
 export default function Anthologies() {
+  useDocumentTitle("Curated Anthologies");
   const { anthologies, loading, error, isUsingFallback } = useAnthologies();
 
   return (

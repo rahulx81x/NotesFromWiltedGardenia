@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import GardeniaEmblem from "../components/GardeniaEmblem";
 import PetalDivider from "../components/PetalDivider";
 
 export default function Colophon() {
+  useDocumentTitle("Colophon & Author's Note");
   return (
     <article className="page-enter colophon-page">
       <header className="colophon-header">
