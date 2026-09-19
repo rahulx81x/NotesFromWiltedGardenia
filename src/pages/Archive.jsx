@@ -302,9 +302,35 @@ export default function Archive() {
                   </time>
 
                   <div className="archive-item-content">
-                    <Link to={`/poem/${poem.id}`} className="archive-item-link">
-                      <span className="archive-item-title">{poem.name}</span>
-                    </Link>
+                    <div className="archive-item-title-row">
+                      <Link to={`/poem/${poem.id}`} className="archive-item-link">
+                        <span className="archive-item-title">{poem.name}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleBookmark(poem.id);
+                        }}
+                        className={`archive-row-bookmark-btn ${isBookmarked(poem.id) ? "active" : ""}`}
+                        title={isBookmarked(poem.id) ? "Remove bookmark (saved locally)" : "Bookmark this note (saved locally)"}
+                        aria-label={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note"}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill={isBookmarked(poem.id) ? "currentColor" : "none"}
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                        </svg>
+                      </button>
+                    </div>
                     <div className="archive-item-subline">
                       <span className="archive-item-author">By {poem.author || DEFAULT_AUTHOR}</span>
                     </div>
@@ -345,30 +371,6 @@ export default function Archive() {
                   </span>
 
                   <div className="archive-item-actions">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleBookmark(poem.id);
-                      }}
-                      className={`archive-row-bookmark-btn ${isBookmarked(poem.id) ? "active" : ""}`}
-                      title={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note (saved locally)"}
-                      aria-label={isBookmarked(poem.id) ? "Remove bookmark" : "Bookmark this note"}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill={isBookmarked(poem.id) ? "currentColor" : "none"}
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </button>
                     <button
                       onClick={(e) => togglePreview(e, poem.id)}
                       className="preview-toggle-btn"
