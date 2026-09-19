@@ -238,40 +238,37 @@ export default function Archive() {
                     </Link>
                     <div className="archive-item-subline">
                       <span className="archive-item-author">By {poem.author || DEFAULT_AUTHOR}</span>
-                      {poem.intro && (
-                        <>
-                          <span className="meta-separator">·</span>
-                          <span className="archive-item-intro-preview">{poem.intro}</span>
-                        </>
-                      )}
-                      {tags.length > 0 && (
-                        <div className="archive-item-tags">
-                          {visibleTags.map((tag) => (
-                            <button
-                              key={tag}
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleTagChange(tag);
-                              }}
-                              className={`archive-mini-tag ${activeTag.toLowerCase() === tag.toLowerCase() ? "active" : ""}`}
-                              title={`Filter by #${tag}`}
-                            >
-                              #{tag}
-                            </button>
-                          ))}
-                          {hiddenCount > 0 && (
-                            <span
-                              className="archive-mini-tag tag-more"
-                              title={`+${hiddenCount} more: ${tags.slice(MAX_CARD_TAGS).map((t) => `#${t}`).join(", ")}`}
-                            >
-                              +{hiddenCount}
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
+                    {poem.intro && (
+                      <p className="archive-item-intro-preview">{poem.intro}</p>
+                    )}
+                    {tags.length > 0 && (
+                      <div className="archive-item-tags">
+                        {visibleTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleTagChange(tag);
+                            }}
+                            className={`archive-mini-tag ${activeTag.toLowerCase() === tag.toLowerCase() ? "active" : ""}`}
+                            title={`Filter by #${tag}`}
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                        {hiddenCount > 0 && (
+                          <span
+                            className="archive-mini-tag tag-more"
+                            title={`+${hiddenCount} more: ${tags.slice(MAX_CARD_TAGS).map((t) => `#${t}`).join(", ")}`}
+                          >
+                            +{hiddenCount}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <span className="archive-item-stanzas">

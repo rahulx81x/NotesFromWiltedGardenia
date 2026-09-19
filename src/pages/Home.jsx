@@ -37,7 +37,7 @@ export default function Home() {
           “A petal pressed into parchment does not preserve the flower; it only marks where silence once bloomed.”
         </blockquote>
         <div className="epigraph-meta">
-          <span>From the Editor’s Desk · Notes between Midnight & Dawn</span>
+          <span>From the Curator’s Desk · Notes between Midnight & Dawn</span>
         </div>
       </section>
 

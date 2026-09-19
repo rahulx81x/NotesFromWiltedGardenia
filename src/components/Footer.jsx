@@ -5,7 +5,7 @@ export default function Footer() {
 
   return (
     <footer className="site-footer">
-      <Link to="/colophon" title="Read Colophon & Author's Note">
+      <Link to="/colophon" title="Read Colophon & Curator's Note">
         <img
           src="/gardenia.svg"
           alt="Wilted gardenia motif"
@@ -19,7 +19,7 @@ export default function Footer() {
       </div>
       <div className="footer-links-group">
         <Link to="/colophon" className="footer-text-link">
-          Colophon & Author’s Note
+          Colophon & Curator’s Note
         </Link>
         <span className="footer-sep">·</span>
         <Link to="/archive" className="footer-text-link">

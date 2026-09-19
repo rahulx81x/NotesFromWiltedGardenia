@@ -1001,7 +1001,7 @@ input, select {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  margin-left: 0.5rem;
+  margin-top: 0.2rem;
   flex-wrap: wrap;
 }
 

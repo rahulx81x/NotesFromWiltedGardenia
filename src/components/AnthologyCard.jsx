@@ -1,5 +1,5 @@
 import GardeniaEmblem from "./GardeniaEmblem";
-import { DEFAULT_AUTHOR } from "../data/config";
+import { DEFAULT_CURATOR } from "../data/config";
 
 export default function AnthologyCard({ anthology, featured = false }) {
   const { title, subtitle, description, link_url, status_or_tag } = anthology;
@@ -16,7 +16,7 @@ export default function AnthologyCard({ anthology, featured = false }) {
       <div className="anthology-card-content">
         <div className="anthology-header-meta">
           {status_or_tag && <div className="anthology-badge">{status_or_tag}</div>}
-          <span className="anthology-author-tag">Curated by {anthology.author || DEFAULT_AUTHOR}</span>
+          <span className="anthology-author-tag">Curated by {anthology.author || DEFAULT_CURATOR}</span>
         </div>
 
         <h3 className="anthology-title">{title}</h3>

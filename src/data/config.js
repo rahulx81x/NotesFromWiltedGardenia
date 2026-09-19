@@ -12,7 +12,8 @@
 export const NOTES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQgFCuylzhYDLLgWbwsYN0KzcpwP6Hd9G9VHGu0hdMDRc70ayewFTroL_HE91Jmrr0sFiKA4MslkNbg/pub?gid=302744447&single=true&output=csv";
 export const ANTHOLOGIES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQgFCuylzhYDLLgWbwsYN0KzcpwP6Hd9G9VHGu0hdMDRc70ayewFTroL_HE91Jmrr0sFiKA4MslkNbg/pub?gid=118497514&single=true&output=csv";
 
-export const DEFAULT_AUTHOR = "Rahul Gouri";
+export const DEFAULT_AUTHOR = "Unrecorded Author";
+export const DEFAULT_CURATOR = "Rahul Gouri";
 
 /**
  * Atmospheric fallback poems matching the exact schema:

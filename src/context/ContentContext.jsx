@@ -5,6 +5,7 @@ import {
   NOTES_CSV_URL,
   ANTHOLOGIES_CSV_URL,
   DEFAULT_AUTHOR,
+  DEFAULT_CURATOR,
   FALLBACK_POEMS,
   FALLBACK_ANTHOLOGIES
 } from "../data/config";
@@ -143,7 +144,7 @@ export function ContentProvider({ children }) {
               .map((row) => ({
                 id: (row.id || "").trim() || (row.title ? row.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") : `anthology-${Math.random()}`),
                 title: (row.title || row.name || "Untitled Collection").trim(),
-                author: (row.author || row.curator || DEFAULT_AUTHOR).trim(),
+                author: (row.author || row.curator || DEFAULT_CURATOR).trim(),
                 subtitle: (row.subtitle || "").trim(),
                 description: (row.description || row.synopsis || "").trim(),
                 link_url: (row.link_url || row.url || row.link || "").trim(),

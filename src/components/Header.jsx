@@ -89,8 +89,8 @@ export default function Header({ petalsEnabled = true, setPetalsEnabled = () => 
             <span className="nav-label-mobile">Anthologies</span>
           </NavLink>
           <NavLink to="/colophon" className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
-            <span className="nav-label-full">Author's Note</span>
-            <span className="nav-label-mobile">Author</span>
+            <span className="nav-label-full">Curator's Note</span>
+            <span className="nav-label-mobile">Curator</span>
           </NavLink>
         </nav>
       </div>
