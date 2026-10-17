@@ -1,4 +1,4 @@
-﻿<!-- Notes from a Wilted Gardenia — README -->
+<!-- Notes from a Wilted Gardenia — README -->
 
 <div align="center">
 
@@ -265,10 +265,11 @@ Generates a downloadable PNG image card of the full poem — suitable for sharin
 - Scales canvas height dynamically if the poem is long enough to require it
 - Adapts font size and line height based on total line count
 - Renders the title, author, all stanzas (with stanza gaps), and a footer watermark
-- Background: warm parchment tone (`#f5ede0`)
-- Fonts: Cormorant Garamond (serif, loaded from Google Fonts)
+- **Subtle Botanical Motifs**: antique gardenia watermarks in corners and a rosette emblem in the header
+- **Theme-Aware Color Palettes**: automatically reflects the active reading theme (parchment light or candle-lit dark)
+- Fonts: Cormorant Garamond (serif, loaded from Google Fonts, awaited via `document.fonts.ready`)
 
-> **Export ↓** button in Reader Tools on the poem view.
+> **Card** button in Reader Tools on the poem view.
 
 ---
 
@@ -528,17 +529,19 @@ export const START_HERE_IDS = [
 
 ## Image Export
 
-The **Export ↓** button on any poem view generates a **1080 × 1350px PNG** (or taller, if the poem requires it). The canvas renderer:
+The **Card** button on any poem view generates a **1080 × 1350px PNG** (or taller, if the poem requires it). The canvas renderer:
 
-1. Fills the background with parchment (`#f5ede0`)
-2. Draws a thin decorative border frame
-3. Renders the poem title (large, Cormorant Garamond)
-4. Renders the author attribution line below
-5. Renders all stanzas with appropriate line wrapping and stanza gaps
-6. Adds a footer watermark: *"Notes from a Wilted Gardenia"*
-7. Triggers a browser file download as `[poem-title].png`
+1. Adapts all tones to the active reading theme (parchment light or candle-lit dark)
+2. Fills the background with themed parchment tone and radiant wash
+3. Renders subtle antique gardenia botanical watermarks (engraved spray & leaves in corners)
+4. Draws a double decorative botanical border frame with corner accents and rosette header emblem
+5. Renders the poem title (large, Cormorant Garamond)
+6. Renders the author attribution line and intro excerpt
+7. Renders all stanzas with appropriate line wrapping and stanza gaps
+8. Adds a footer seal & watermark: *"Notes from a Wilted Gardenia"* / *"the silence of things left unsaid"*
+9. Triggers a browser file download as `wilted-gardenia-[poem-title].png` (appends `-dark` in dark mode)
 
-Font scaling is automatic — longer poems reduce font size to fit all lines without clipping. The renderer uses `document.fonts.load()` to await web font availability before drawing, ensuring serif fonts render correctly rather than falling back to system fonts.
+Font scaling is automatic — longer poems reduce font size to fit all lines without clipping. The renderer uses `document.fonts.ready` to await web font availability before drawing, ensuring serif fonts render correctly rather than falling back to system fonts.
 
 ---
 

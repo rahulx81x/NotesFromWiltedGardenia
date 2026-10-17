@@ -193,7 +193,7 @@ export default function PoemView() {
               onClick={handleExportImage}
               disabled={isExporting}
               className="tool-btn text-btn"
-              title="Export note excerpt as an image card"
+              title="Export note as image card (matches active theme)"
               aria-label="Export note as image card"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
