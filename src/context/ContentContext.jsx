@@ -9,6 +9,7 @@ import {
   FALLBACK_POEMS,
   FALLBACK_ANTHOLOGIES
 } from "../data/config";
+import { parsePublishDate } from "../utils/dateHelpers";
 
 export function ContentProvider({ children }) {
   const [poems, setPoems] = useState([]);
@@ -35,9 +36,11 @@ export function ContentProvider({ children }) {
 
       if (isPlaceholder) {
         if (isMounted) {
-          const sorted = [...FALLBACK_POEMS].sort((a, b) =>
-            new Date(b.publish_date) - new Date(a.publish_date)
-          );
+          const sorted = [...FALLBACK_POEMS].sort((a, b) => {
+            const da = parsePublishDate(b.publish_date);
+            const db = parsePublishDate(a.publish_date);
+            return (da?.getTime() ?? 0) - (db?.getTime() ?? 0);
+          });
           setPoems(sorted);
           setPoemsFallback(true);
           setPoemsLoading(false);
@@ -78,7 +81,11 @@ export function ContentProvider({ children }) {
               }))
               .filter((item) => item.name && item.name !== "Untitled");
 
-            parsedItems.sort((a, b) => new Date(b.publish_date) - new Date(a.publish_date));
+            parsedItems.sort((a, b) => {
+              const da = parsePublishDate(b.publish_date);
+              const db = parsePublishDate(a.publish_date);
+              return (da?.getTime() ?? 0) - (db?.getTime() ?? 0);
+            });
 
             if (parsedItems.length === 0) {
               setPoems(FALLBACK_POEMS);

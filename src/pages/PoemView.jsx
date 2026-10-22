@@ -8,6 +8,7 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount, getReadMinutes } from "../utils/poemHelpers";
 import { getRelatedPoems } from "../utils/relatedPoems";
 import { exportPoemImage } from "../utils/exportPoemImage";
+import { formatDisplayDate, toISODateString } from "../utils/dateHelpers";
 import NoteCard from "../components/NoteCard";
 import LoadingState from "../components/LoadingState";
 import PetalDivider from "../components/PetalDivider";
@@ -227,8 +228,8 @@ export default function PoemView() {
         <header className="poem-header">
           <div className="poem-header-meta">
             {poem.publish_date && (
-              <time className="poem-date" dateTime={poem.publish_date}>
-                {poem.publish_date}
+              <time className="poem-date" dateTime={toISODateString(poem.publish_date)}>
+                {formatDisplayDate(poem.publish_date, "long")}
               </time>
             )}
             <span className="meta-separator">·</span>
@@ -260,7 +261,7 @@ export default function PoemView() {
         {/* Poet Attribution Signature */}
         <div className="poem-author-signature">
           <span className="sig-author">— {poem.author || DEFAULT_AUTHOR}</span>
-          {poem.publish_date && <span className="sig-date">{poem.publish_date}</span>}
+          {poem.publish_date && <span className="sig-date">{formatDisplayDate(poem.publish_date, "long")}</span>}
         </div>
 
         {/* Dynamic Poem Theme Tags from CSV */}
@@ -292,7 +293,7 @@ export default function PoemView() {
                   <span aria-hidden="true">←</span> Earlier Note
                 </span>
                 <span className="pagination-title">{prevPoem.name}</span>
-                <span className="pagination-date">{prevPoem.publish_date}</span>
+                <span className="pagination-date">{formatDisplayDate(prevPoem.publish_date, "short")}</span>
               </Link>
             ) : (
               <div className="pagination-empty">
@@ -309,7 +310,7 @@ export default function PoemView() {
                   Later Note <span aria-hidden="true">→</span>
                 </span>
                 <span className="pagination-title">{nextPoem.name}</span>
-                <span className="pagination-date">{nextPoem.publish_date}</span>
+                <span className="pagination-date">{formatDisplayDate(nextPoem.publish_date, "short")}</span>
               </Link>
             ) : (
               <div className="pagination-empty">

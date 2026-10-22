@@ -3,6 +3,7 @@ import GardeniaEmblem from "./GardeniaEmblem";
 import { DEFAULT_AUTHOR } from "../data/config";
 import { getStanzaCount } from "../utils/poemHelpers";
 import { useBookmarks } from "../hooks/useBookmarks";
+import { formatDisplayDate, toISODateString } from "../utils/dateHelpers";
 
 const MAX_CARD_TAGS = 5;
 
@@ -57,8 +58,8 @@ export default function NoteCard({ poem, index = 0 }) {
       <Link to={`/poem/${id}`} className="note-card-inner">
         <div className="note-card-meta">
           {publish_date && (
-            <time dateTime={publish_date} className="note-card-date">
-              {publish_date}
+            <time dateTime={toISODateString(publish_date)} className="note-card-date">
+              {formatDisplayDate(publish_date, "short")}
             </time>
           )}
           <span className="meta-separator">·</span>

@@ -5,6 +5,7 @@ import { DEFAULT_AUTHOR, MOOD_MAP } from "../data/config";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount } from "../utils/poemHelpers";
+import { formatDisplayDate, toISODateString, extractYear } from "../utils/dateHelpers";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import GardeniaEmblem from "../components/GardeniaEmblem";
@@ -69,9 +70,8 @@ export default function Archive() {
   const availableYears = useMemo(() => {
     const years = new Set();
     poems.forEach((p) => {
-      if (p.publish_date && p.publish_date.length >= 4) {
-        years.add(p.publish_date.substring(0, 4));
-      }
+      const y = extractYear(p.publish_date);
+      if (y) years.add(y);
     });
     return Array.from(years).sort((a, b) => b.localeCompare(a));
   }, [poems]);
@@ -81,7 +81,7 @@ export default function Archive() {
     return poems.filter((poem) => {
       const matchesYear =
         selectedYear === "all" ||
-        (poem.publish_date && poem.publish_date.startsWith(selectedYear));
+        extractYear(poem.publish_date) === selectedYear;
 
       const query = searchTerm.toLowerCase().trim();
       const matchesQuery =
@@ -164,7 +164,7 @@ export default function Archive() {
           >
             <option value="all">All Years ({poems.length})</option>
             {availableYears.map((year) => {
-              const count = poems.filter((p) => p.publish_date.startsWith(year)).length;
+              const count = poems.filter((p) => extractYear(p.publish_date) === year).length;
               return (
                 <option key={year} value={year}>
                   {year} ({count})
@@ -297,8 +297,8 @@ export default function Archive() {
                 style={{ animationDelay: `${index * 0.03}s` }}
               >
                 <div className="archive-item">
-                  <time className="archive-item-date" dateTime={poem.publish_date}>
-                    {poem.publish_date || "Undated"}
+                  <time className="archive-item-date" dateTime={toISODateString(poem.publish_date)}>
+                    {formatDisplayDate(poem.publish_date, "short") || "Undated"}
                   </time>
 
                   <div className="archive-item-content">
