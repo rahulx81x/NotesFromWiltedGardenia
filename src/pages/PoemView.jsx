@@ -7,7 +7,7 @@ import { useReadingHistory } from "../hooks/useReadingHistory";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount, getReadMinutes } from "../utils/poemHelpers";
 import { getRelatedPoems } from "../utils/relatedPoems";
-import { exportPoemImage } from "../utils/exportPoemImage";
+import { exportPoemImage, getPoemExportPlan } from "../utils/exportPoemImage";
 import { formatDisplayDate, toISODateString } from "../utils/dateHelpers";
 import NoteCard from "../components/NoteCard";
 import LoadingState from "../components/LoadingState";
@@ -87,10 +87,11 @@ export default function PoemView() {
   const prevPoem = currentIndex < poems.length - 1 ? poems[currentIndex + 1] : null; // Earlier date
   const nextPoem = currentIndex > 0 ? poems[currentIndex - 1] : null; // Later date
 
-  // Metrics
+  // Metrics & Export Plan
   const stanzas = getStanzaCount(poem.contents);
   const readMinutes = getReadMinutes(poem.contents);
   const relatedPoems = getRelatedPoems(poem, poems, 3);
+  const exportPlan = poem ? getPoemExportPlan(poem) : { slideCount: 1, isMultiSlide: false };
 
   const handleExportImage = async () => {
     if (!poem || isExporting) return;
@@ -194,15 +195,31 @@ export default function PoemView() {
               onClick={handleExportImage}
               disabled={isExporting}
               className="tool-btn text-btn"
-              title="Export note as image card (matches active theme)"
-              aria-label="Export note as image card"
+              title={
+                exportPlan.isMultiSlide
+                  ? `Export note as ${exportPlan.slideCount}-slide 4:5 Instagram carousel (ZIP)`
+                  : "Export note as 4:5 Instagram card"
+              }
+              aria-label={
+                exportPlan.isMultiSlide
+                  ? `Export note as ${exportPlan.slideCount}-slide Instagram carousel`
+                  : "Export note as Instagram card"
+              }
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              <span>{isExporting ? "Saving…" : "Card"}</span>
+              <span>
+                {isExporting
+                  ? exportPlan.isMultiSlide
+                    ? "Packing…"
+                    : "Saving…"
+                  : exportPlan.isMultiSlide
+                  ? `Cards (${exportPlan.slideCount})`
+                  : "Card"}
+              </span>
             </button>
 
             {/* Share Piece */}

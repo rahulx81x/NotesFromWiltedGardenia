@@ -1,4 +1,9 @@
+import JSZip from "jszip";
 import { DEFAULT_AUTHOR } from "../data/config";
+
+export const CARD_WIDTH = 1080;
+export const CARD_HEIGHT = 1350; // Fixed 4:5 Instagram portrait aspect ratio
+const MAX_CONTENT_WIDTH = 840; // 120px margins on left and right
 
 /**
  * Aesthetic theme color definitions matching the site's design system tokens:
@@ -25,6 +30,7 @@ const THEME_PALETTES = {
     attribution: "#8f6543",
     footerQuote: "#887d71",
     footerDivider: "#ded6c5",
+    isDark: false,
   },
   dark: {
     bgBase: "#171513",
@@ -45,6 +51,7 @@ const THEME_PALETTES = {
     attribution: "#caa07b",
     footerQuote: "#8e8375",
     footerDivider: "#342d26",
+    isDark: true,
   },
 };
 
@@ -120,17 +127,529 @@ const GARDENIA_EMBLEM_PATHS = [
   "M48 44 C52 42 55 44 54 48 C52 51 48 51 47 48 C45 46 46 45 48 44 Z",
 ];
 
+// Helper to wrap long lines
+function wrapText(ctx, text, maxWidth, fontStr) {
+  if (!text) return [];
+  ctx.font = fontStr;
+  const words = text.split(" ");
+  const lines = [];
+  let currentLine = words[0] || "";
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const testLine = currentLine + " " + word;
+    if (ctx.measureText(testLine).width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
 /**
- * Exports a poem in its entirety as an aesthetically pleasing portrait card
- * using the HTML5 Canvas 2D API. Dynamically scales and sizes the canvas
- * so all stanzas are preserved and elegantly typeset.
- *
- * Theme-aware: adapts colors to light (parchment) or dark (candle-lit) mode.
+ * Determine proportional typography scale based on overall poem length
+ */
+function getTypographyConfig(totalLines) {
+  if (totalLines <= 14) {
+    return {
+      fontSize: 27,
+      lineHeight: 44,
+      stanzaGap: 34,
+      titleFont: "600 46px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 56,
+      introFont: "italic 23px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 34,
+    };
+  } else if (totalLines <= 30) {
+    return {
+      fontSize: 25,
+      lineHeight: 41,
+      stanzaGap: 30,
+      titleFont: "600 44px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 52,
+      introFont: "italic 22px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 32,
+    };
+  } else {
+    return {
+      fontSize: 23,
+      lineHeight: 38,
+      stanzaGap: 26,
+      titleFont: "600 42px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 50,
+      introFont: "italic 21px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 30,
+    };
+  }
+}
+
+/**
+ * Shared scratch canvas context for measuring layout dimensions
+ */
+let sharedScratchCtx = null;
+function getScratchCtx() {
+  if (!sharedScratchCtx && typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
+    canvas.width = 10;
+    canvas.height = 10;
+    sharedScratchCtx = canvas.getContext("2d");
+  }
+  return sharedScratchCtx;
+}
+
+/**
+ * Calculates height of a group of wrapped stanzas including inter-stanza gaps
+ */
+function calculateStanzasHeight(stanzaGroup, lineHeight, stanzaGap) {
+  if (!stanzaGroup || stanzaGroup.length === 0) return 0;
+  const linesCount = stanzaGroup.reduce((sum, s) => sum + s.lines.length, 0);
+  const gapsCount = Math.max(0, stanzaGroup.length - 1);
+  return linesCount * lineHeight + gapsCount * stanzaGap;
+}
+
+/**
+ * Smart Multi-Slide Pagination Engine:
+ * - Constrains every card to fixed 1080 x 1350 (4:5)
+ * - Keeps stanzas intact without splitting them across slides whenever possible
+ * - Fallbacks to line-wrapping split only if a single stanza is taller than an entire card
+ * - Slide 1: Full emblem, title, intro, and stanzas
+ * - Slides 2..N: Minimal brand header and continued stanzas
+ * - Last Slide: Concluding stanzas, author signature, and footer seal
+ */
+export function buildSlidePlan(poem, ctx = null) {
+  const activeCtx = ctx || getScratchCtx();
+  if (!activeCtx || !poem) {
+    return {
+      slideCount: 1,
+      isMultiSlide: false,
+      slides: [],
+      typo: getTypographyConfig(10),
+      titleLines: [],
+      introLines: [],
+    };
+  }
+
+  const rawContents = (poem.contents || "").trim();
+  const rawStanzas = rawContents
+    .split(/\n\s*\n/)
+    .map((s) => s.split("\n").map((l) => l.trim()).filter(Boolean))
+    .filter((s) => s.length > 0);
+
+  const totalRawLines = rawStanzas.reduce((sum, s) => sum + s.length, 0);
+  const typo = getTypographyConfig(totalRawLines);
+  const bodyFont = `italic ${typo.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+
+  // Measure title & intro
+  const titleLines = wrapText(activeCtx, poem.name || "Untitled Note", MAX_CONTENT_WIDTH, typo.titleFont);
+  const titleHeight = titleLines.length * typo.titleLineHeight;
+
+  const introLines = poem.intro
+    ? wrapText(activeCtx, `“${poem.intro}”`, MAX_CONTENT_WIDTH - 60, typo.introFont)
+    : [];
+  const introHeight = introLines.length > 0 ? introLines.length * typo.introLineHeight + 20 : 0;
+
+  // Slide 1 body starting Y position
+  const slide1BodyStartY = 230 + titleHeight + introHeight + 24;
+
+  // Continuation slides body starting Y position (minimal brand header)
+  const contBodyStartY = 168;
+
+  // Bottom boundary capacities:
+  // Single-slide mode capacity: needs room for signature + footer quote (~210px reserved at bottom)
+  const singleSlideCapacity = Math.max(100, (CARD_HEIGHT - 210) - slide1BodyStartY);
+
+  // Multi-slide Slide 1 capacity: needs room for bottom slide indicator · 1 / N · (~145px reserved)
+  const slide1MultiCapacity = Math.max(100, (CARD_HEIGHT - 145) - slide1BodyStartY);
+
+  // Middle slides capacity: minimal header at top, indicator at bottom (~145px reserved)
+  const middleSlideCapacity = Math.max(100, (CARD_HEIGHT - 145) - contBodyStartY);
+
+  // Last slide capacity: minimal header at top, signature + footer quote + indicator at bottom (~245px reserved)
+  const lastSlideCapacity = Math.max(100, (CARD_HEIGHT - 245) - contBodyStartY);
+
+  // Wrap each stanza into lines
+  const wrappedStanzas = rawStanzas.map((stanza) => {
+    const lines = stanza.flatMap((line) => wrapText(activeCtx, line, MAX_CONTENT_WIDTH, bodyFont));
+    const height = lines.length * typo.lineHeight;
+    return { lines, height };
+  });
+
+  const totalAllStanzasHeight = calculateStanzasHeight(wrappedStanzas, typo.lineHeight, typo.stanzaGap);
+
+  // 1. Check if the entire poem fits on a single 4:5 card
+  if (totalAllStanzasHeight <= singleSlideCapacity) {
+    return {
+      slideCount: 1,
+      isMultiSlide: false,
+      typo,
+      titleLines,
+      introLines,
+      slides: [
+        {
+          slideNumber: 1,
+          totalSlides: 1,
+          isFirst: true,
+          isLast: true,
+          stanzas: wrappedStanzas,
+          bodyStartY: slide1BodyStartY,
+          availableHeight: singleSlideCapacity,
+          stanzasHeight: totalAllStanzasHeight,
+        },
+      ],
+    };
+  }
+
+  // 2. Multi-slide pagination with smart stanza packing
+  const slides = [];
+  let remainingStanzas = [...wrappedStanzas];
+
+  // Pack Slide 1
+  const slide1Stanzas = [];
+  let curSlide1Height = 0;
+
+  while (remainingStanzas.length > 0) {
+    const nextStanza = remainingStanzas[0];
+    const addedHeight = slide1Stanzas.length === 0 ? nextStanza.height : typo.stanzaGap + nextStanza.height;
+    if (curSlide1Height + addedHeight <= slide1MultiCapacity) {
+      slide1Stanzas.push(remainingStanzas.shift());
+      curSlide1Height += addedHeight;
+    } else {
+      if (slide1Stanzas.length === 0) {
+        // Fallback for an unusually tall single stanza that exceeds Slide 1
+        const maxLines = Math.max(1, Math.floor(slide1MultiCapacity / typo.lineHeight));
+        const firstPart = nextStanza.lines.slice(0, maxLines);
+        const rest = nextStanza.lines.slice(maxLines);
+        slide1Stanzas.push({ lines: firstPart, height: firstPart.length * typo.lineHeight });
+        curSlide1Height = firstPart.length * typo.lineHeight;
+        if (rest.length > 0) {
+          remainingStanzas[0] = { lines: rest, height: rest.length * typo.lineHeight };
+        } else {
+          remainingStanzas.shift();
+        }
+      }
+      break;
+    }
+  }
+
+  slides.push({
+    slideNumber: 1,
+    isFirst: true,
+    isLast: false,
+    stanzas: slide1Stanzas,
+    bodyStartY: slide1BodyStartY,
+    availableHeight: slide1MultiCapacity,
+    stanzasHeight: curSlide1Height,
+  });
+
+  // Pack continuation slides (Slides 2..N)
+  while (remainingStanzas.length > 0) {
+    const candidateRemainingHeight = calculateStanzasHeight(remainingStanzas, typo.lineHeight, typo.stanzaGap);
+    if (candidateRemainingHeight <= lastSlideCapacity) {
+      // All remaining stanzas fit onto this final slide!
+      slides.push({
+        slideNumber: slides.length + 1,
+        isFirst: false,
+        isLast: true,
+        stanzas: [...remainingStanzas],
+        bodyStartY: contBodyStartY,
+        availableHeight: lastSlideCapacity,
+        stanzasHeight: candidateRemainingHeight,
+      });
+      remainingStanzas = [];
+    } else {
+      // Middle slide: pack as many full stanzas as fit
+      const slideStanzas = [];
+      let curHeight = 0;
+      while (remainingStanzas.length > 0) {
+        const nextStanza = remainingStanzas[0];
+        const addedHeight = slideStanzas.length === 0 ? nextStanza.height : typo.stanzaGap + nextStanza.height;
+        if (curHeight + addedHeight <= middleSlideCapacity) {
+          slideStanzas.push(remainingStanzas.shift());
+          curHeight += addedHeight;
+        } else {
+          if (slideStanzas.length === 0) {
+            // Line-split fallback for single stanza taller than an entire slide
+            const maxLines = Math.max(1, Math.floor(middleSlideCapacity / typo.lineHeight));
+            const firstPart = nextStanza.lines.slice(0, maxLines);
+            const rest = nextStanza.lines.slice(maxLines);
+            slideStanzas.push({ lines: firstPart, height: firstPart.length * typo.lineHeight });
+            curHeight = firstPart.length * typo.lineHeight;
+            if (rest.length > 0) {
+              remainingStanzas[0] = { lines: rest, height: rest.length * typo.lineHeight };
+            } else {
+              remainingStanzas.shift();
+            }
+          }
+          break;
+        }
+      }
+
+      slides.push({
+        slideNumber: slides.length + 1,
+        isFirst: false,
+        isLast: false,
+        stanzas: slideStanzas,
+        bodyStartY: contBodyStartY,
+        availableHeight: middleSlideCapacity,
+        stanzasHeight: curHeight,
+      });
+    }
+  }
+
+  // Ensure last slide is tagged as isLast and totalSlides is consistent
+  if (slides.length > 0) {
+    slides[slides.length - 1].isLast = true;
+  }
+  const totalSlides = slides.length;
+  slides.forEach((s) => {
+    s.totalSlides = totalSlides;
+  });
+
+  return {
+    slideCount: totalSlides,
+    isMultiSlide: totalSlides > 1,
+    typo,
+    titleLines,
+    introLines,
+    slides,
+  };
+}
+
+/**
+ * Returns the estimated export slide count and multi-slide state for UI preview
+ */
+export function getPoemExportPlan(poem) {
+  const plan = buildSlidePlan(poem);
+  return {
+    slideCount: plan.slideCount,
+    isMultiSlide: plan.isMultiSlide,
+  };
+}
+
+/**
+ * Botanical watermark renderer
+ */
+function drawGardeniaWatermark(ctx, palette, paths, offsetX, offsetY, scale, rotation = 0) {
+  if (typeof Path2D === "undefined") return;
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  if (rotation !== 0) ctx.rotate(rotation);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = palette.motifAlpha;
+  ctx.strokeStyle = palette.motifColor;
+  ctx.lineWidth = 1.3;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  for (let i = 0; i < paths.length; i++) {
+    ctx.stroke(new Path2D(paths[i]));
+  }
+  ctx.restore();
+}
+
+/**
+ * Renders a single 1080 x 1350 card for a given slide object
+ */
+function renderCardSlide(canvas, slide, plan, poem, palette) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  canvas.width = CARD_WIDTH;
+  canvas.height = CARD_HEIGHT;
+
+  // 1. Base parchment wash
+  ctx.fillStyle = palette.bgBase;
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+  const grad = ctx.createRadialGradient(
+    CARD_WIDTH / 2,
+    CARD_HEIGHT * 0.35,
+    60,
+    CARD_WIDTH / 2,
+    CARD_HEIGHT / 2,
+    CARD_HEIGHT * 0.75
+  );
+  grad.addColorStop(0, palette.gradCenter);
+  grad.addColorStop(1, palette.gradEdge);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+  // 2. Botanical watermarks in corners
+  drawGardeniaWatermark(ctx, palette, TOP_RIGHT_MOTIF_PATHS, CARD_WIDTH - 420, -10, 0.88, 0.08);
+  drawGardeniaWatermark(ctx, palette, BOTTOM_LEFT_MOTIF_PATHS, -20, CARD_HEIGHT - 420, 0.85, -0.1);
+
+  // 3. Double frame & corner accents
+  ctx.strokeStyle = palette.borderOuter;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(48, 48, CARD_WIDTH - 96, CARD_HEIGHT - 96);
+
+  ctx.strokeStyle = palette.borderInner;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(58, 58, CARD_WIDTH - 116, CARD_HEIGHT - 116);
+
+  const drawCornerDot = (x, y) => {
+    ctx.fillStyle = palette.cornerDot;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  drawCornerDot(58, 58);
+  drawCornerDot(CARD_WIDTH - 58, 58);
+  drawCornerDot(58, CARD_HEIGHT - 58);
+  drawCornerDot(CARD_WIDTH - 58, CARD_HEIGHT - 58);
+
+  // 4. Header rendering
+  if (slide.isFirst) {
+    // Rosette Colophon Emblem
+    if (typeof Path2D !== "undefined") {
+      ctx.save();
+      ctx.translate(CARD_WIDTH / 2 - 20, 68);
+      ctx.scale(0.40, 0.40);
+      ctx.globalAlpha = palette.isDark ? 0.70 : 0.60;
+      ctx.strokeStyle = palette.headerBrand;
+      ctx.lineWidth = 1.3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 0; i < GARDENIA_EMBLEM_PATHS.length; i++) {
+        ctx.stroke(new Path2D(GARDENIA_EMBLEM_PATHS[i]));
+      }
+      ctx.restore();
+    }
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = palette.headerBrand;
+    ctx.font = "italic 22px 'Cormorant Garamond', Georgia, serif";
+    ctx.fillText("Notes from a Wilted Gardenia", CARD_WIDTH / 2, 130);
+
+    ctx.fillStyle = palette.headerMeta;
+    ctx.font = "13px sans-serif";
+    const dateStr = poem.publish_date ? `· ${poem.publish_date} ·` : "· Digital Leaf ·";
+    ctx.fillText(dateStr.toUpperCase(), CARD_WIDTH / 2, 160);
+
+    // Divider Line with central botanical diamond
+    ctx.strokeStyle = palette.divider;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(CARD_WIDTH / 2 - 100, 180);
+    ctx.lineTo(CARD_WIDTH / 2 - 14, 180);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(CARD_WIDTH / 2 + 14, 180);
+    ctx.lineTo(CARD_WIDTH / 2 + 100, 180);
+    ctx.stroke();
+
+    ctx.fillStyle = palette.dividerEmblem;
+    ctx.beginPath();
+    ctx.moveTo(CARD_WIDTH / 2, 180 - 5);
+    ctx.lineTo(CARD_WIDTH / 2 + 5, 180);
+    ctx.lineTo(CARD_WIDTH / 2, 180 + 5);
+    ctx.lineTo(CARD_WIDTH / 2 - 5, 180);
+    ctx.closePath();
+    ctx.fill();
+
+    // Title
+    let curTitleY = 232;
+    ctx.fillStyle = palette.title;
+    ctx.font = plan.typo.titleFont;
+    plan.titleLines.forEach((line) => {
+      ctx.fillText(line, CARD_WIDTH / 2, curTitleY);
+      curTitleY += plan.typo.titleLineHeight;
+    });
+
+    // Intro (if present)
+    if (plan.introLines.length > 0) {
+      curTitleY += 8;
+      ctx.fillStyle = palette.intro;
+      ctx.font = plan.typo.introFont;
+      plan.introLines.forEach((line) => {
+        ctx.fillText(line, CARD_WIDTH / 2, curTitleY);
+        curTitleY += plan.typo.introLineHeight;
+      });
+    }
+  } else {
+    // Minimal brand header on continuation slides
+    ctx.textAlign = "center";
+    ctx.fillStyle = palette.headerBrand;
+    ctx.font = "italic 20px 'Cormorant Garamond', Georgia, serif";
+    ctx.fillText("Notes from a Wilted Gardenia", CARD_WIDTH / 2, 98);
+
+    ctx.strokeStyle = palette.divider;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(CARD_WIDTH / 2 - 55, 116);
+    ctx.lineTo(CARD_WIDTH / 2 + 55, 116);
+    ctx.stroke();
+  }
+
+  // 5. Stanzas rendering with gentle vertical balancing
+  let curY = slide.bodyStartY;
+  const remainingSpace = slide.availableHeight - slide.stanzasHeight;
+  if (remainingSpace > 30) {
+    curY += Math.floor(remainingSpace * 0.35);
+  }
+
+  ctx.textAlign = "center";
+  ctx.font = `italic ${plan.typo.fontSize}px 'Cormorant Garamond', Georgia, serif`;
+  ctx.fillStyle = palette.body;
+
+  slide.stanzas.forEach((stanza, stIdx) => {
+    stanza.lines.forEach((line) => {
+      ctx.fillText(line, CARD_WIDTH / 2, curY);
+      curY += plan.typo.lineHeight;
+    });
+    if (stIdx < slide.stanzas.length - 1) {
+      curY += plan.typo.stanzaGap;
+    }
+  });
+
+  // 6. Footer & attribution
+  if (slide.isLast) {
+    // Poet Attribution
+    curY += 36;
+    ctx.fillStyle = palette.attribution;
+    ctx.font = "italic 25px 'Cormorant Garamond', Georgia, serif";
+    const authorName = poem.author || DEFAULT_AUTHOR;
+    ctx.fillText(`— ${authorName}`, CARD_WIDTH / 2, curY);
+
+    // Footer Seal
+    const footerY = slide.totalSlides > 1 ? CARD_HEIGHT - 138 : CARD_HEIGHT - 110;
+    ctx.fillStyle = palette.footerQuote;
+    ctx.font = "15px sans-serif";
+    ctx.fillText("the silence of things left unsaid", CARD_WIDTH / 2, footerY);
+
+    ctx.strokeStyle = palette.footerDivider;
+    ctx.beginPath();
+    ctx.moveTo(CARD_WIDTH / 2 - 60, footerY - 26);
+    ctx.lineTo(CARD_WIDTH / 2 + 60, footerY - 26);
+    ctx.stroke();
+
+    if (slide.totalSlides > 1) {
+      // Slide indicator on final slide: · N / N ·
+      ctx.fillStyle = palette.headerMeta;
+      ctx.font = "14px sans-serif";
+      ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, CARD_WIDTH / 2, CARD_HEIGHT - 85);
+    }
+  } else {
+    // Continuation slide indicator: · k / N ·
+    ctx.fillStyle = palette.headerMeta;
+    ctx.font = "14px sans-serif";
+    ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, CARD_WIDTH / 2, CARD_HEIGHT - 92);
+  }
+}
+
+/**
+ * Exports a poem as 4:5 Instagram-friendly portrait cards:
+ * - Single slide: downloads PNG directly
+ * - Multi-slide: compiles all slides into a ZIP archive with sequentially numbered PNGs
  */
 export async function exportPoemImage(poem, options = {}) {
   if (!poem) return false;
 
-  // Await fonts readiness if supported to prevent system-font fallback
+  // Await web fonts readiness to ensure typography loads correctly
   if (typeof document !== "undefined" && document.fonts?.ready) {
     try {
       await document.fonts.ready;
@@ -139,7 +658,7 @@ export async function exportPoemImage(poem, options = {}) {
     }
   }
 
-  // Determine active theme (defaults to document data-theme or localStorage)
+  // Determine active theme
   const explicitTheme = typeof options === "string" ? options : options?.theme;
   let activeTheme = explicitTheme;
   if (!activeTheme || (activeTheme !== "light" && activeTheme !== "dark")) {
@@ -156,303 +675,66 @@ export async function exportPoemImage(poem, options = {}) {
   const isDark = activeTheme === "dark";
   const palette = isDark ? THEME_PALETTES.dark : THEME_PALETTES.light;
 
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
+  // Calculate slide layout plan
+  const plan = buildSlidePlan(poem);
+  if (!plan.slides || plan.slides.length === 0) return false;
 
-  const width = 1080;
-  const maxContentWidth = width - 260;
+  const safeTitle = (poem.name || "poem")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const themeSuffix = isDark ? "-dark" : "";
 
-  // 1. Parse all stanzas from poem contents
-  const rawContents = (poem.contents || "").trim();
-  const stanzas = rawContents
-    .split(/\n\s*\n/)
-    .map((s) => s.split("\n").map((l) => l.trim()).filter(Boolean))
-    .filter((s) => s.length > 0);
+  // 1. Single-slide poem: download directly as a 1080 x 1350 PNG
+  if (plan.slideCount === 1) {
+    const canvas = document.createElement("canvas");
+    renderCardSlide(canvas, plan.slides[0], plan, poem, palette);
 
-  const totalLines = stanzas.reduce((sum, st) => sum + st.length, 0);
-
-  // 2. Determine harmonious font and spacing parameters based on poem length
-  let poemFontSize = 28;
-  let poemLineHeight = 44;
-  let stanzaGap = 32;
-
-  if (totalLines <= 12) {
-    poemFontSize = 31;
-    poemLineHeight = 49;
-    stanzaGap = 38;
-  } else if (totalLines <= 22) {
-    poemFontSize = 27;
-    poemLineHeight = 43;
-    stanzaGap = 30;
-  } else if (totalLines <= 36) {
-    poemFontSize = 24;
-    poemLineHeight = 38;
-    stanzaGap = 24;
-  } else if (totalLines <= 55) {
-    poemFontSize = 21;
-    poemLineHeight = 33;
-    stanzaGap = 20;
-  } else {
-    poemFontSize = 19;
-    poemLineHeight = 30;
-    stanzaGap = 18;
-  }
-
-  // Helper to wrap long lines
-  const wrapText = (text, maxWidth, fontStr) => {
-    if (!text) return [];
-    ctx.font = fontStr;
-    const words = text.split(" ");
-    const lines = [];
-    let currentLine = words[0] || "";
-
-    for (let i = 1; i < words.length; i++) {
-      const word = words[i];
-      const testLine = currentLine + " " + word;
-      if (ctx.measureText(testLine).width <= maxWidth) {
-        currentLine = testLine;
-      } else {
-        lines.push(currentLine);
-        currentLine = word;
-      }
-    }
-    lines.push(currentLine);
-    return lines;
-  };
-
-  // Pre-measure title lines
-  const titleFont = "600 48px 'Cormorant Garamond', Georgia, serif";
-  const titleLines = wrapText(poem.name || "Untitled Note", maxContentWidth, titleFont);
-  const titleHeight = titleLines.length * 58;
-
-  // Pre-measure intro if available
-  const introFont = "italic 24px 'Cormorant Garamond', Georgia, serif";
-  const introLines = poem.intro ? wrapText(`“${poem.intro}”`, maxContentWidth - 80, introFont) : [];
-  const introHeight = introLines.length > 0 ? introLines.length * 36 + 25 : 0;
-
-  // Measure all stanzas with line wrapping
-  const bodyFont = `italic ${poemFontSize}px 'Cormorant Garamond', Georgia, serif`;
-  const wrappedStanzas = stanzas.map((st) =>
-    st.flatMap((line) => wrapText(line, maxContentWidth, bodyFont))
-  );
-
-  const totalWrappedLines = wrappedStanzas.reduce((sum, st) => sum + st.length, 0);
-  const stanzasTotalHeight =
-    totalWrappedLines * poemLineHeight + Math.max(0, wrappedStanzas.length - 1) * stanzaGap;
-
-  // Fixed vertical sections
-  const headerHeight = 220; // Emblem, publication date, divider
-  const attributionHeight = 70;
-  const footerSealHeight = 170;
-  const extraPadding = 120;
-
-  const totalNeededHeight =
-    headerHeight + titleHeight + introHeight + stanzasTotalHeight + attributionHeight + footerSealHeight + extraPadding;
-
-  // Set final adaptive canvas dimensions (minimum 1350 for social card proportion)
-  const height = Math.max(1350, Math.round(totalNeededHeight));
-  canvas.width = width;
-  canvas.height = height;
-
-  // 3. Render Background Parchment
-  ctx.fillStyle = palette.bgBase;
-  ctx.fillRect(0, 0, width, height);
-
-  // Soft radiant paper wash
-  const grad = ctx.createRadialGradient(
-    width / 2,
-    height * 0.35,
-    60,
-    width / 2,
-    height / 2,
-    Math.max(width, height) * 0.75
-  );
-  grad.addColorStop(0, palette.gradCenter);
-  grad.addColorStop(1, palette.gradEdge);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
-
-  // 3b. Subtle Antique Gardenia Botanical Watermarks (quiet background motifs)
-  const drawGardeniaWatermark = (paths, offsetX, offsetY, scale, rotation = 0) => {
-    if (typeof Path2D === "undefined") return;
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
-    if (rotation !== 0) ctx.rotate(rotation);
-    ctx.scale(scale, scale);
-    ctx.globalAlpha = palette.motifAlpha;
-    ctx.strokeStyle = palette.motifColor;
-    ctx.lineWidth = 1.3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    for (let i = 0; i < paths.length; i++) {
-      ctx.stroke(new Path2D(paths[i]));
-    }
-    ctx.restore();
-  };
-
-  // Top-Right: Full Botanical Gardenia Bloom & Foliage Spray Watermark
-  drawGardeniaWatermark(TOP_RIGHT_MOTIF_PATHS, width - 420, -10, 0.88, 0.08);
-
-  // Bottom-Left: Subtle Gardenia Blossom with Withered Leaves Watermark
-  drawGardeniaWatermark(BOTTOM_LEFT_MOTIF_PATHS, -20, height - 420, 0.85, -0.1);
-
-  // 4. Double Botanical Border & Corner Accents
-  ctx.strokeStyle = palette.borderOuter;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(48, 48, width - 96, height - 96);
-
-  ctx.strokeStyle = palette.borderInner;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(58, 58, width - 116, height - 116);
-
-  const drawCornerDot = (x, y) => {
-    ctx.fillStyle = palette.cornerDot;
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  drawCornerDot(58, 58);
-  drawCornerDot(width - 58, 58);
-  drawCornerDot(58, height - 58);
-  drawCornerDot(width - 58, height - 58);
-
-  // 5. Header Emblem & Publication Details
-  // Authentic Gardenia Rosette Colophon Emblem
-  if (typeof Path2D !== "undefined") {
-    ctx.save();
-    ctx.translate(width / 2 - 20, 72);
-    ctx.scale(0.40, 0.40);
-    ctx.globalAlpha = isDark ? 0.70 : 0.60;
-    ctx.strokeStyle = palette.headerBrand;
-    ctx.lineWidth = 1.3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (let i = 0; i < GARDENIA_EMBLEM_PATHS.length; i++) {
-      ctx.stroke(new Path2D(GARDENIA_EMBLEM_PATHS[i]));
-    }
-    ctx.restore();
-  }
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = palette.headerBrand;
-  ctx.font = "italic 24px 'Cormorant Garamond', Georgia, serif";
-  ctx.fillText("Notes from a Wilted Gardenia", width / 2, 134);
-
-  ctx.fillStyle = palette.headerMeta;
-  ctx.font = "14px sans-serif";
-  const dateStr = poem.publish_date ? `· ${poem.publish_date} ·` : "· Digital Leaf ·";
-  ctx.fillText(dateStr.toUpperCase(), width / 2, 168);
-
-  // Divider Line with central botanical petal diamond
-  ctx.strokeStyle = palette.divider;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(width / 2 - 110, 190);
-  ctx.lineTo(width / 2 - 14, 190);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(width / 2 + 14, 190);
-  ctx.lineTo(width / 2 + 110, 190);
-  ctx.stroke();
-
-  // Central botanical diamond accent
-  ctx.fillStyle = palette.dividerEmblem;
-  ctx.beginPath();
-  ctx.moveTo(width / 2, 190 - 5);
-  ctx.lineTo(width / 2 + 5, 190);
-  ctx.lineTo(width / 2, 190 + 5);
-  ctx.lineTo(width / 2 - 5, 190);
-  ctx.closePath();
-  ctx.fill();
-
-  // 6. Draw Poem Title
-  let curY = 250;
-  ctx.fillStyle = palette.title;
-  ctx.font = titleFont;
-  titleLines.forEach((line) => {
-    ctx.fillText(line, width / 2, curY);
-    curY += 56;
-  });
-
-  // 7. Draw Intro Excerpt (if present)
-  if (introLines.length > 0) {
-    curY += 8;
-    ctx.fillStyle = palette.intro;
-    ctx.font = introFont;
-    introLines.forEach((line) => {
-      ctx.fillText(line, width / 2, curY);
-      curY += 34;
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          resolve(false);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.download = `wilted-gardenia-${safeTitle}${themeSuffix}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        resolve(true);
+      }, "image/png");
     });
-    curY += 16;
-  } else {
-    curY += 24;
   }
 
-  // Calculate available space to vertically balance stanzas if short
-  const remainingSpace = height - footerSealHeight - attributionHeight - curY - stanzasTotalHeight;
-  if (remainingSpace > 40) {
-    curY += Math.floor(remainingSpace * 0.35);
-  }
+  // 2. Multi-slide long-form poem: render each 4:5 card and package into a ZIP
+  const zip = new JSZip();
 
-  // 8. Draw ALL Stanzas
-  ctx.font = bodyFont;
-  ctx.fillStyle = palette.body;
+  for (let i = 0; i < plan.slides.length; i++) {
+    const slide = plan.slides[i];
+    const canvas = document.createElement("canvas");
+    renderCardSlide(canvas, slide, plan, poem, palette);
 
-  wrappedStanzas.forEach((stanzaLines, stIdx) => {
-    stanzaLines.forEach((line) => {
-      ctx.fillText(line, width / 2, curY);
-      curY += poemLineHeight;
-    });
-
-    // Space between stanzas
-    if (stIdx < wrappedStanzas.length - 1) {
-      curY += stanzaGap;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (blob) {
+      const slideIndexStr = String(i + 1).padStart(2, "0");
+      const filename = `wilted-gardenia-${safeTitle}${themeSuffix}-${slideIndexStr}.png`;
+      zip.file(filename, blob);
     }
-  });
+  }
 
-  // 9. Poet Attribution Signature
-  curY += 38;
-  ctx.fillStyle = palette.attribution;
-  ctx.font = "italic 26px 'Cormorant Garamond', Georgia, serif";
-  const authorName = poem.author || DEFAULT_AUTHOR;
-  ctx.fillText(`— ${authorName}`, width / 2, curY);
+  const zipBlob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(zipBlob);
+  const link = document.createElement("a");
+  link.download = `wilted-gardenia-${safeTitle}${themeSuffix}-cards.zip`;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 
-  // 10. Footer Seal & Brand Philosophy
-  ctx.textAlign = "center";
-  ctx.fillStyle = palette.footerQuote;
-  ctx.font = "16px sans-serif";
-  ctx.fillText("the silence of things left unsaid", width / 2, height - 110);
-
-  ctx.strokeStyle = palette.footerDivider;
-  ctx.beginPath();
-  ctx.moveTo(width / 2 - 60, height - 138);
-  ctx.lineTo(width / 2 + 60, height - 138);
-  ctx.stroke();
-
-  // Export blob and trigger download
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(false);
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const safeTitle = (poem.name || "poem")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
-      const themeSuffix = isDark ? "-dark" : "";
-      link.download = `wilted-gardenia-${safeTitle}${themeSuffix}.png`;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      resolve(true);
-    }, "image/png");
-  });
+  return true;
 }
+
