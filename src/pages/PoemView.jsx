@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { usePoems } from "../data/usePoems";
 import { DEFAULT_AUTHOR } from "../data/config";
@@ -7,7 +7,7 @@ import { useReadingHistory } from "../hooks/useReadingHistory";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getStanzaCount, getReadMinutes } from "../utils/poemHelpers";
 import { getRelatedPoems } from "../utils/relatedPoems";
-import { exportPoemImage, getPoemExportPlan } from "../utils/exportPoemImage";
+import { exportPoemImage, getPoemExportPlans } from "../utils/exportPoemImage";
 import { formatDisplayDate, toISODateString } from "../utils/dateHelpers";
 import NoteCard from "../components/NoteCard";
 import LoadingState from "../components/LoadingState";
@@ -21,10 +21,12 @@ export default function PoemView() {
   const { recordRead } = useReadingHistory();
 
   const [fontSizeLevel, setFontSizeLevel] = useState("normal"); // 'small' | 'normal' | 'large'
-  const [isFocusMode, setIsFocusMode] = useState(false);
   const [shareFeedback, setShareFeedback] = useState(null); // null | 'copied' | 'shared'
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+
+  const exportMenuRef = useRef(null);
 
   const currentIndex = poems.findIndex((p) => p.id === id);
   const poem = currentIndex !== -1 ? poems[currentIndex] : null;
@@ -57,6 +59,29 @@ export default function PoemView() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Close export dropdown on click outside or escape key
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsExportMenuOpen(false);
+      }
+    };
+
+    if (isExportMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isExportMenuOpen]);
+
   if (loading) {
     return (
       <div className="poem-reader-view">
@@ -87,17 +112,18 @@ export default function PoemView() {
   const prevPoem = currentIndex < poems.length - 1 ? poems[currentIndex + 1] : null; // Earlier date
   const nextPoem = currentIndex > 0 ? poems[currentIndex - 1] : null; // Later date
 
-  // Metrics & Export Plan
+  // Metrics & Export Plans
   const stanzas = getStanzaCount(poem.contents);
   const readMinutes = getReadMinutes(poem.contents);
   const relatedPoems = getRelatedPoems(poem, poems, 3);
-  const exportPlan = poem ? getPoemExportPlan(poem) : { slideCount: 1, isMultiSlide: false };
+  const exportPlans = poem ? getPoemExportPlans(poem) : null;
 
-  const handleExportImage = async () => {
+  const handleExportFormat = async (formatKey) => {
     if (!poem || isExporting) return;
     setIsExporting(true);
+    setIsExportMenuOpen(false);
     try {
-      await exportPoemImage(poem);
+      await exportPoemImage(poem, { format: formatKey });
     } finally {
       setIsExporting(false);
     }
@@ -130,7 +156,7 @@ export default function PoemView() {
         aria-hidden="true"
       />
 
-      <article className={`poem-reader-view ${isFocusMode ? "focus-mode-active" : ""}`}>
+      <article className="poem-reader-view">
         {/* Top Breadcrumb & Reading Tools */}
         <div className="reader-top-bar">
           <Link to="/archive" className="back-link">
@@ -164,19 +190,6 @@ export default function PoemView() {
               </button>
             </div>
 
-            {/* Focus Mode */}
-            <button
-              onClick={() => setIsFocusMode((prev) => !prev)}
-              className={`tool-btn text-btn ${isFocusMode ? "active" : ""}`}
-              title={isFocusMode ? "Exit Focus Mode" : "Enter Focus Mode (dims background chrome)"}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M3 12h1m16 0h1M12 3v1m0 16v1" />
-              </svg>
-              <span>{isFocusMode ? "Focusing" : "Focus"}</span>
-            </button>
-
             {/* Bookmark Note */}
             <button
               onClick={() => toggleBookmark(poem.id)}
@@ -190,37 +203,95 @@ export default function PoemView() {
               <span>{isBookmarked(poem.id) ? "Saved" : "Save"}</span>
             </button>
 
-            {/* Export as Image Card */}
-            <button
-              onClick={handleExportImage}
-              disabled={isExporting}
-              className="tool-btn text-btn"
-              title={
-                exportPlan.isMultiSlide
-                  ? `Export note as ${exportPlan.slideCount}-slide 4:5 Instagram carousel (ZIP)`
-                  : "Export note as 4:5 Instagram card"
-              }
-              aria-label={
-                exportPlan.isMultiSlide
-                  ? `Export note as ${exportPlan.slideCount}-slide Instagram carousel`
-                  : "Export note as Instagram card"
-              }
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span>
-                {isExporting
-                  ? exportPlan.isMultiSlide
-                    ? "Packing…"
-                    : "Saving…"
-                  : exportPlan.isMultiSlide
-                  ? `Cards (${exportPlan.slideCount})`
-                  : "Card"}
-              </span>
-            </button>
+            {/* Export as Image Card Dropdown */}
+            <div className="card-export-dropdown" ref={exportMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                disabled={isExporting}
+                className={`tool-btn text-btn ${isExportMenuOpen ? "active" : ""}`}
+                title="Export note as Instagram card (choose 4:5 Post or 9:16 Story)"
+                aria-expanded={isExportMenuOpen}
+                aria-haspopup="true"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <span>{isExporting ? "Packing…" : "Card"}</span>
+                <svg
+                  width="8"
+                  height="8"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    marginLeft: "1px",
+                    transition: "transform 0.2s ease",
+                    transform: isExportMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  }}
+                  aria-hidden="true"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {isExportMenuOpen && exportPlans && (
+                <div className="export-format-menu" role="menu" aria-label="Choose card format">
+                  <div className="export-menu-header">
+                    <span>Export Format</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportFormat("post")}
+                    className="export-menu-option"
+                  >
+                    <div className="export-option-icon post-aspect" aria-hidden="true">
+                      <svg width="15" height="19" viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <rect x="1" y="1" width="14" height="18" rx="2" />
+                      </svg>
+                    </div>
+                    <div className="export-option-details">
+                      <div className="export-option-title-row">
+                        <span className="export-option-name">Feed Post</span>
+                        <span className="export-option-ratio">4:5</span>
+                      </div>
+                      <span className="export-option-meta">
+                        1080 × 1350 · {exportPlans.post.isMultiSlide ? `${exportPlans.post.slideCount} slides (ZIP)` : "1 card (PNG)"}
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => handleExportFormat("story")}
+                    className="export-menu-option"
+                  >
+                    <div className="export-option-icon story-aspect" aria-hidden="true">
+                      <svg width="13" height="23" viewBox="0 0 14 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <rect x="1" y="1" width="12" height="22" rx="2" />
+                      </svg>
+                    </div>
+                    <div className="export-option-details">
+                      <div className="export-option-title-row">
+                        <span className="export-option-name">Story</span>
+                        <span className="export-option-ratio">9:16</span>
+                      </div>
+                      <span className="export-option-meta">
+                        1080 × 1920 · {exportPlans.story.isMultiSlide ? `${exportPlans.story.slideCount} slides (ZIP)` : "1 card (PNG)"}
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Share Piece */}
             <button

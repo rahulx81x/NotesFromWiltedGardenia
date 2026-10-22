@@ -1,9 +1,50 @@
 import JSZip from "jszip";
 import { DEFAULT_AUTHOR } from "../data/config";
 
-export const CARD_WIDTH = 1080;
-export const CARD_HEIGHT = 1350; // Fixed 4:5 Instagram portrait aspect ratio
-const MAX_CONTENT_WIDTH = 840; // 120px margins on left and right
+/**
+ * Aspect Ratio & Platform Dimensions Configurations
+ */
+export const FORMATS = {
+  post: {
+    id: "post",
+    label: "IG Post",
+    aspectRatioLabel: "4:5",
+    sublabel: "Portrait Post",
+    width: 1080,
+    height: 1350,
+    maxContentWidth: 840,
+    headerTop: 68,
+    contHeaderTop: 98,
+    footerBottom: 110,
+    singleBottomReserve: 210,
+    multiSlideBottomReserve: 145,
+    lastSlideBottomReserve: 245,
+    fileSuffix: "-post",
+  },
+  story: {
+    id: "story",
+    label: "IG Story",
+    aspectRatioLabel: "9:16",
+    sublabel: "Vertical Fullscreen",
+    width: 1080,
+    height: 1920,
+    maxContentWidth: 840,
+    // Clearance buffers for Instagram Stories overlay chrome:
+    // Top safe area: clears profile badge, handle, story progress timer bars
+    headerTop: 155,
+    contHeaderTop: 175,
+    // Bottom safe area: clears reply input and heart/share icons
+    footerBottom: 210,
+    singleBottomReserve: 310,
+    multiSlideBottomReserve: 250,
+    lastSlideBottomReserve: 350,
+    fileSuffix: "-story",
+  },
+};
+
+// Legacy exports for backwards compatibility
+export const CARD_WIDTH = FORMATS.post.width;
+export const CARD_HEIGHT = FORMATS.post.height;
 
 /**
  * Aesthetic theme color definitions matching the site's design system tokens:
@@ -212,17 +253,17 @@ function calculateStanzasHeight(stanzaGroup, lineHeight, stanzaGap) {
 
 /**
  * Smart Multi-Slide Pagination Engine:
- * - Constrains every card to fixed 1080 x 1350 (4:5)
- * - Keeps stanzas intact without splitting them across slides whenever possible
- * - Fallbacks to line-wrapping split only if a single stanza is taller than an entire card
- * - Slide 1: Full emblem, title, intro, and stanzas
- * - Slides 2..N: Minimal brand header and continued stanzas
- * - Last Slide: Concluding stanzas, author signature, and footer seal
+ * - Supports both 4:5 (Post) and 9:16 (Story) aspect ratios
+ * - Preserves stanzas intact without splitting across slides
+ * - Keeps generous Instagram Story clearance buffers
  */
-export function buildSlidePlan(poem, ctx = null) {
+export function buildSlidePlan(poem, formatKey = "post", ctx = null) {
   const activeCtx = ctx || getScratchCtx();
+  const format = FORMATS[formatKey] || FORMATS.post;
+
   if (!activeCtx || !poem) {
     return {
+      format,
       slideCount: 1,
       isMultiSlide: false,
       slides: [],
@@ -243,45 +284,39 @@ export function buildSlidePlan(poem, ctx = null) {
   const bodyFont = `italic ${typo.fontSize}px 'Cormorant Garamond', Georgia, serif`;
 
   // Measure title & intro
-  const titleLines = wrapText(activeCtx, poem.name || "Untitled Note", MAX_CONTENT_WIDTH, typo.titleFont);
+  const titleLines = wrapText(activeCtx, poem.name || "Untitled Note", format.maxContentWidth, typo.titleFont);
   const titleHeight = titleLines.length * typo.titleLineHeight;
 
   const introLines = poem.intro
-    ? wrapText(activeCtx, `“${poem.intro}”`, MAX_CONTENT_WIDTH - 60, typo.introFont)
+    ? wrapText(activeCtx, `“${poem.intro}”`, format.maxContentWidth - 60, typo.introFont)
     : [];
   const introHeight = introLines.length > 0 ? introLines.length * typo.introLineHeight + 20 : 0;
 
   // Slide 1 body starting Y position
-  const slide1BodyStartY = 230 + titleHeight + introHeight + 24;
+  const slide1BodyStartY = format.headerTop + 164 + titleHeight + introHeight + 20;
 
-  // Continuation slides body starting Y position (minimal brand header)
-  const contBodyStartY = 168;
+  // Continuation slides body starting Y position
+  const contBodyStartY = format.contHeaderTop + 68;
 
   // Bottom boundary capacities:
-  // Single-slide mode capacity: needs room for signature + footer quote (~210px reserved at bottom)
-  const singleSlideCapacity = Math.max(100, (CARD_HEIGHT - 210) - slide1BodyStartY);
-
-  // Multi-slide Slide 1 capacity: needs room for bottom slide indicator · 1 / N · (~145px reserved)
-  const slide1MultiCapacity = Math.max(100, (CARD_HEIGHT - 145) - slide1BodyStartY);
-
-  // Middle slides capacity: minimal header at top, indicator at bottom (~145px reserved)
-  const middleSlideCapacity = Math.max(100, (CARD_HEIGHT - 145) - contBodyStartY);
-
-  // Last slide capacity: minimal header at top, signature + footer quote + indicator at bottom (~245px reserved)
-  const lastSlideCapacity = Math.max(100, (CARD_HEIGHT - 245) - contBodyStartY);
+  const singleSlideCapacity = Math.max(100, (format.height - format.singleBottomReserve) - slide1BodyStartY);
+  const slide1MultiCapacity = Math.max(100, (format.height - format.multiSlideBottomReserve) - slide1BodyStartY);
+  const middleSlideCapacity = Math.max(100, (format.height - format.multiSlideBottomReserve) - contBodyStartY);
+  const lastSlideCapacity = Math.max(100, (format.height - format.lastSlideBottomReserve) - contBodyStartY);
 
   // Wrap each stanza into lines
   const wrappedStanzas = rawStanzas.map((stanza) => {
-    const lines = stanza.flatMap((line) => wrapText(activeCtx, line, MAX_CONTENT_WIDTH, bodyFont));
+    const lines = stanza.flatMap((line) => wrapText(activeCtx, line, format.maxContentWidth, bodyFont));
     const height = lines.length * typo.lineHeight;
     return { lines, height };
   });
 
   const totalAllStanzasHeight = calculateStanzasHeight(wrappedStanzas, typo.lineHeight, typo.stanzaGap);
 
-  // 1. Check if the entire poem fits on a single 4:5 card
+  // 1. Single card check
   if (totalAllStanzasHeight <= singleSlideCapacity) {
     return {
+      format,
       slideCount: 1,
       isMultiSlide: false,
       typo,
@@ -302,7 +337,7 @@ export function buildSlidePlan(poem, ctx = null) {
     };
   }
 
-  // 2. Multi-slide pagination with smart stanza packing
+  // 2. Multi-slide pagination
   const slides = [];
   let remainingStanzas = [...wrappedStanzas];
 
@@ -348,7 +383,7 @@ export function buildSlidePlan(poem, ctx = null) {
   while (remainingStanzas.length > 0) {
     const candidateRemainingHeight = calculateStanzasHeight(remainingStanzas, typo.lineHeight, typo.stanzaGap);
     if (candidateRemainingHeight <= lastSlideCapacity) {
-      // All remaining stanzas fit onto this final slide!
+      // All remaining stanzas fit onto this final slide
       slides.push({
         slideNumber: slides.length + 1,
         isFirst: false,
@@ -371,7 +406,6 @@ export function buildSlidePlan(poem, ctx = null) {
           curHeight += addedHeight;
         } else {
           if (slideStanzas.length === 0) {
-            // Line-split fallback for single stanza taller than an entire slide
             const maxLines = Math.max(1, Math.floor(middleSlideCapacity / typo.lineHeight));
             const firstPart = nextStanza.lines.slice(0, maxLines);
             const rest = nextStanza.lines.slice(maxLines);
@@ -399,7 +433,6 @@ export function buildSlidePlan(poem, ctx = null) {
     }
   }
 
-  // Ensure last slide is tagged as isLast and totalSlides is consistent
   if (slides.length > 0) {
     slides[slides.length - 1].isLast = true;
   }
@@ -409,6 +442,7 @@ export function buildSlidePlan(poem, ctx = null) {
   });
 
   return {
+    format,
     slideCount: totalSlides,
     isMultiSlide: totalSlides > 1,
     typo,
@@ -419,13 +453,24 @@ export function buildSlidePlan(poem, ctx = null) {
 }
 
 /**
- * Returns the estimated export slide count and multi-slide state for UI preview
+ * Returns plans for both Post (4:5) and Story (9:16) formats for UI selector
  */
-export function getPoemExportPlan(poem) {
-  const plan = buildSlidePlan(poem);
+export function getPoemExportPlans(poem) {
+  return {
+    post: buildSlidePlan(poem, "post"),
+    story: buildSlidePlan(poem, "story"),
+  };
+}
+
+/**
+ * Legacy single-plan getter (defaults to post format)
+ */
+export function getPoemExportPlan(poem, formatKey = "post") {
+  const plan = buildSlidePlan(poem, formatKey);
   return {
     slideCount: plan.slideCount,
     isMultiSlide: plan.isMultiSlide,
+    format: plan.format,
   };
 }
 
@@ -451,44 +496,46 @@ function drawGardeniaWatermark(ctx, palette, paths, offsetX, offsetY, scale, rot
 }
 
 /**
- * Renders a single 1080 x 1350 card for a given slide object
+ * Renders a single card slide with dimension awareness (4:5 or 9:16)
  */
 function renderCardSlide(canvas, slide, plan, poem, palette) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  canvas.width = CARD_WIDTH;
-  canvas.height = CARD_HEIGHT;
+  const { width, height, headerTop, contHeaderTop, footerBottom } = plan.format;
+
+  canvas.width = width;
+  canvas.height = height;
 
   // 1. Base parchment wash
   ctx.fillStyle = palette.bgBase;
-  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+  ctx.fillRect(0, 0, width, height);
 
   const grad = ctx.createRadialGradient(
-    CARD_WIDTH / 2,
-    CARD_HEIGHT * 0.35,
+    width / 2,
+    height * 0.35,
     60,
-    CARD_WIDTH / 2,
-    CARD_HEIGHT / 2,
-    CARD_HEIGHT * 0.75
+    width / 2,
+    height / 2,
+    Math.max(width, height) * 0.65
   );
   grad.addColorStop(0, palette.gradCenter);
   grad.addColorStop(1, palette.gradEdge);
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+  ctx.fillRect(0, 0, width, height);
 
   // 2. Botanical watermarks in corners
-  drawGardeniaWatermark(ctx, palette, TOP_RIGHT_MOTIF_PATHS, CARD_WIDTH - 420, -10, 0.88, 0.08);
-  drawGardeniaWatermark(ctx, palette, BOTTOM_LEFT_MOTIF_PATHS, -20, CARD_HEIGHT - 420, 0.85, -0.1);
+  drawGardeniaWatermark(ctx, palette, TOP_RIGHT_MOTIF_PATHS, width - 420, -10, 0.88, 0.08);
+  drawGardeniaWatermark(ctx, palette, BOTTOM_LEFT_MOTIF_PATHS, -20, height - 420, 0.85, -0.1);
 
   // 3. Double frame & corner accents
   ctx.strokeStyle = palette.borderOuter;
   ctx.lineWidth = 2;
-  ctx.strokeRect(48, 48, CARD_WIDTH - 96, CARD_HEIGHT - 96);
+  ctx.strokeRect(48, 48, width - 96, height - 96);
 
   ctx.strokeStyle = palette.borderInner;
   ctx.lineWidth = 1;
-  ctx.strokeRect(58, 58, CARD_WIDTH - 116, CARD_HEIGHT - 116);
+  ctx.strokeRect(58, 58, width - 116, height - 116);
 
   const drawCornerDot = (x, y) => {
     ctx.fillStyle = palette.cornerDot;
@@ -497,16 +544,16 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
     ctx.fill();
   };
   drawCornerDot(58, 58);
-  drawCornerDot(CARD_WIDTH - 58, 58);
-  drawCornerDot(58, CARD_HEIGHT - 58);
-  drawCornerDot(CARD_WIDTH - 58, CARD_HEIGHT - 58);
+  drawCornerDot(width - 58, 58);
+  drawCornerDot(58, height - 58);
+  drawCornerDot(width - 58, height - 58);
 
   // 4. Header rendering
   if (slide.isFirst) {
     // Rosette Colophon Emblem
     if (typeof Path2D !== "undefined") {
       ctx.save();
-      ctx.translate(CARD_WIDTH / 2 - 20, 68);
+      ctx.translate(width / 2 - 20, headerTop);
       ctx.scale(0.40, 0.40);
       ctx.globalAlpha = palette.isDark ? 0.70 : 0.60;
       ctx.strokeStyle = palette.headerBrand;
@@ -522,41 +569,41 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
     ctx.textAlign = "center";
     ctx.fillStyle = palette.headerBrand;
     ctx.font = "italic 22px 'Cormorant Garamond', Georgia, serif";
-    ctx.fillText("Notes from a Wilted Gardenia", CARD_WIDTH / 2, 130);
+    ctx.fillText("Notes from a Wilted Gardenia", width / 2, headerTop + 62);
 
     ctx.fillStyle = palette.headerMeta;
     ctx.font = "13px sans-serif";
     const dateStr = poem.publish_date ? `· ${poem.publish_date} ·` : "· Digital Leaf ·";
-    ctx.fillText(dateStr.toUpperCase(), CARD_WIDTH / 2, 160);
+    ctx.fillText(dateStr.toUpperCase(), width / 2, headerTop + 92);
 
     // Divider Line with central botanical diamond
     ctx.strokeStyle = palette.divider;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(CARD_WIDTH / 2 - 100, 180);
-    ctx.lineTo(CARD_WIDTH / 2 - 14, 180);
+    ctx.moveTo(width / 2 - 100, headerTop + 112);
+    ctx.lineTo(width / 2 - 14, headerTop + 112);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(CARD_WIDTH / 2 + 14, 180);
-    ctx.lineTo(CARD_WIDTH / 2 + 100, 180);
+    ctx.moveTo(width / 2 + 14, headerTop + 112);
+    ctx.lineTo(width / 2 + 100, headerTop + 112);
     ctx.stroke();
 
     ctx.fillStyle = palette.dividerEmblem;
     ctx.beginPath();
-    ctx.moveTo(CARD_WIDTH / 2, 180 - 5);
-    ctx.lineTo(CARD_WIDTH / 2 + 5, 180);
-    ctx.lineTo(CARD_WIDTH / 2, 180 + 5);
-    ctx.lineTo(CARD_WIDTH / 2 - 5, 180);
+    ctx.moveTo(width / 2, headerTop + 112 - 5);
+    ctx.lineTo(width / 2 + 5, headerTop + 112);
+    ctx.lineTo(width / 2, headerTop + 112 + 5);
+    ctx.lineTo(width / 2 - 5, headerTop + 112);
     ctx.closePath();
     ctx.fill();
 
     // Title
-    let curTitleY = 232;
+    let curTitleY = headerTop + 164;
     ctx.fillStyle = palette.title;
     ctx.font = plan.typo.titleFont;
     plan.titleLines.forEach((line) => {
-      ctx.fillText(line, CARD_WIDTH / 2, curTitleY);
+      ctx.fillText(line, width / 2, curTitleY);
       curTitleY += plan.typo.titleLineHeight;
     });
 
@@ -566,7 +613,7 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
       ctx.fillStyle = palette.intro;
       ctx.font = plan.typo.introFont;
       plan.introLines.forEach((line) => {
-        ctx.fillText(line, CARD_WIDTH / 2, curTitleY);
+        ctx.fillText(line, width / 2, curTitleY);
         curTitleY += plan.typo.introLineHeight;
       });
     }
@@ -575,13 +622,13 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
     ctx.textAlign = "center";
     ctx.fillStyle = palette.headerBrand;
     ctx.font = "italic 20px 'Cormorant Garamond', Georgia, serif";
-    ctx.fillText("Notes from a Wilted Gardenia", CARD_WIDTH / 2, 98);
+    ctx.fillText("Notes from a Wilted Gardenia", width / 2, contHeaderTop);
 
     ctx.strokeStyle = palette.divider;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(CARD_WIDTH / 2 - 55, 116);
-    ctx.lineTo(CARD_WIDTH / 2 + 55, 116);
+    ctx.moveTo(width / 2 - 55, contHeaderTop + 18);
+    ctx.lineTo(width / 2 + 55, contHeaderTop + 18);
     ctx.stroke();
   }
 
@@ -598,7 +645,7 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
 
   slide.stanzas.forEach((stanza, stIdx) => {
     stanza.lines.forEach((line) => {
-      ctx.fillText(line, CARD_WIDTH / 2, curY);
+      ctx.fillText(line, width / 2, curY);
       curY += plan.typo.lineHeight;
     });
     if (stIdx < slide.stanzas.length - 1) {
@@ -613,43 +660,44 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
     ctx.fillStyle = palette.attribution;
     ctx.font = "italic 25px 'Cormorant Garamond', Georgia, serif";
     const authorName = poem.author || DEFAULT_AUTHOR;
-    ctx.fillText(`— ${authorName}`, CARD_WIDTH / 2, curY);
+    ctx.fillText(`— ${authorName}`, width / 2, curY);
 
     // Footer Seal
-    const footerY = slide.totalSlides > 1 ? CARD_HEIGHT - 138 : CARD_HEIGHT - 110;
+    const footerY = slide.totalSlides > 1 ? height - (footerBottom + 28) : height - footerBottom;
     ctx.fillStyle = palette.footerQuote;
     ctx.font = "15px sans-serif";
-    ctx.fillText("the silence of things left unsaid", CARD_WIDTH / 2, footerY);
+    ctx.fillText("the silence of things left unsaid", width / 2, footerY);
 
     ctx.strokeStyle = palette.footerDivider;
     ctx.beginPath();
-    ctx.moveTo(CARD_WIDTH / 2 - 60, footerY - 26);
-    ctx.lineTo(CARD_WIDTH / 2 + 60, footerY - 26);
+    ctx.moveTo(width / 2 - 60, footerY - 26);
+    ctx.lineTo(width / 2 + 60, footerY - 26);
     ctx.stroke();
 
     if (slide.totalSlides > 1) {
       // Slide indicator on final slide: · N / N ·
       ctx.fillStyle = palette.headerMeta;
       ctx.font = "14px sans-serif";
-      ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, CARD_WIDTH / 2, CARD_HEIGHT - 85);
+      ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, width / 2, height - (footerBottom - 25));
     }
   } else {
     // Continuation slide indicator: · k / N ·
     ctx.fillStyle = palette.headerMeta;
     ctx.font = "14px sans-serif";
-    ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, CARD_WIDTH / 2, CARD_HEIGHT - 92);
+    ctx.fillText(`·  ${slide.slideNumber} / ${slide.totalSlides}  ·`, width / 2, height - (footerBottom - 18));
   }
 }
 
 /**
- * Exports a poem as 4:5 Instagram-friendly portrait cards:
- * - Single slide: downloads PNG directly
- * - Multi-slide: compiles all slides into a ZIP archive with sequentially numbered PNGs
+ * Exports a poem as Instagram-friendly portrait cards:
+ * Options:
+ * - format: "post" (4:5, 1080x1350) or "story" (9:16, 1080x1920)
+ * - theme: "light" or "dark" (defaults to active theme)
  */
 export async function exportPoemImage(poem, options = {}) {
   if (!poem) return false;
 
-  // Await web fonts readiness to ensure typography loads correctly
+  // Await web fonts readiness
   if (typeof document !== "undefined" && document.fonts?.ready) {
     try {
       await document.fonts.ready;
@@ -658,8 +706,13 @@ export async function exportPoemImage(poem, options = {}) {
     }
   }
 
+  // Format selection ("post" | "story")
+  const formatKey = typeof options === "string" && (options === "post" || options === "story")
+    ? options
+    : options?.format || "post";
+
   // Determine active theme
-  const explicitTheme = typeof options === "string" ? options : options?.theme;
+  const explicitTheme = options?.theme || (typeof options === "string" && options !== "post" && options !== "story" ? options : null);
   let activeTheme = explicitTheme;
   if (!activeTheme || (activeTheme !== "light" && activeTheme !== "dark")) {
     if (typeof document !== "undefined") {
@@ -675,8 +728,8 @@ export async function exportPoemImage(poem, options = {}) {
   const isDark = activeTheme === "dark";
   const palette = isDark ? THEME_PALETTES.dark : THEME_PALETTES.light;
 
-  // Calculate slide layout plan
-  const plan = buildSlidePlan(poem);
+  // Calculate slide layout plan for selected format
+  const plan = buildSlidePlan(poem, formatKey);
   if (!plan.slides || plan.slides.length === 0) return false;
 
   const safeTitle = (poem.name || "poem")
@@ -684,8 +737,9 @@ export async function exportPoemImage(poem, options = {}) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   const themeSuffix = isDark ? "-dark" : "";
+  const formatSuffix = plan.format.fileSuffix;
 
-  // 1. Single-slide poem: download directly as a 1080 x 1350 PNG
+  // 1. Single-slide poem: download directly as PNG
   if (plan.slideCount === 1) {
     const canvas = document.createElement("canvas");
     renderCardSlide(canvas, plan.slides[0], plan, poem, palette);
@@ -698,7 +752,7 @@ export async function exportPoemImage(poem, options = {}) {
         }
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.download = `wilted-gardenia-${safeTitle}${themeSuffix}.png`;
+        link.download = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}.png`;
         link.href = url;
         document.body.appendChild(link);
         link.click();
@@ -709,7 +763,7 @@ export async function exportPoemImage(poem, options = {}) {
     });
   }
 
-  // 2. Multi-slide long-form poem: render each 4:5 card and package into a ZIP
+  // 2. Multi-slide long-form poem: package into a ZIP
   const zip = new JSZip();
 
   for (let i = 0; i < plan.slides.length; i++) {
@@ -720,7 +774,7 @@ export async function exportPoemImage(poem, options = {}) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (blob) {
       const slideIndexStr = String(i + 1).padStart(2, "0");
-      const filename = `wilted-gardenia-${safeTitle}${themeSuffix}-${slideIndexStr}.png`;
+      const filename = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}-${slideIndexStr}.png`;
       zip.file(filename, blob);
     }
   }
@@ -728,7 +782,7 @@ export async function exportPoemImage(poem, options = {}) {
   const zipBlob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(zipBlob);
   const link = document.createElement("a");
-  link.download = `wilted-gardenia-${safeTitle}${themeSuffix}-cards.zip`;
+  link.download = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}-cards.zip`;
   link.href = url;
   document.body.appendChild(link);
   link.click();
@@ -737,4 +791,5 @@ export async function exportPoemImage(poem, options = {}) {
 
   return true;
 }
+
 
