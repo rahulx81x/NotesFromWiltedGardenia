@@ -219,7 +219,7 @@ export default function PoemView() {
                   <circle cx="8.5" cy="8.5" r="1.5" />
                   <polyline points="21 15 16 10 5 21" />
                 </svg>
-                <span>{isExporting ? "Packing…" : "Card"}</span>
+                <span>{isExporting ? "Saving…" : "Card"}</span>
                 <svg
                   width="8"
                   height="8"
@@ -263,7 +263,7 @@ export default function PoemView() {
                         <span className="export-option-ratio">4:5</span>
                       </div>
                       <span className="export-option-meta">
-                        1080 × 1350 · {exportPlans.post.isMultiSlide ? `${exportPlans.post.slideCount} slides (ZIP)` : "1 card (PNG)"}
+                        1080 × 1350 · {exportPlans.post.isMultiSlide ? `${exportPlans.post.slideCount} slides (PNG)` : "1 card (PNG)"}
                       </span>
                     </div>
                   </button>
@@ -285,7 +285,7 @@ export default function PoemView() {
                         <span className="export-option-ratio">9:16</span>
                       </div>
                       <span className="export-option-meta">
-                        1080 × 1920 · {exportPlans.story.isMultiSlide ? `${exportPlans.story.slideCount} slides (ZIP)` : "1 card (PNG)"}
+                        1080 × 1920 · {exportPlans.story.isMultiSlide ? `${exportPlans.story.slideCount} slides (PNG)` : "1 card (PNG)"}
                       </span>
                     </div>
                   </button>

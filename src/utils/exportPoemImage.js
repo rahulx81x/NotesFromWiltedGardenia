@@ -1,5 +1,4 @@
-import JSZip from "jszip";
-import { DEFAULT_AUTHOR } from "../data/config";
+import { DEFAULT_AUTHOR } from "../data/config.js";
 
 /**
  * Aspect Ratio & Platform Dimensions Configurations
@@ -196,33 +195,33 @@ function wrapText(ctx, text, maxWidth, fontStr) {
 function getTypographyConfig(totalLines) {
   if (totalLines <= 14) {
     return {
-      fontSize: 27,
-      lineHeight: 44,
-      stanzaGap: 34,
-      titleFont: "600 46px 'Cormorant Garamond', Georgia, serif",
-      titleLineHeight: 56,
-      introFont: "italic 23px 'Cormorant Garamond', Georgia, serif",
-      introLineHeight: 34,
+      fontSize: 42,
+      lineHeight: 64,
+      stanzaGap: 48,
+      titleFont: "600 60px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 72,
+      introFont: "italic 32px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 46,
     };
   } else if (totalLines <= 30) {
     return {
-      fontSize: 25,
-      lineHeight: 41,
-      stanzaGap: 30,
-      titleFont: "600 44px 'Cormorant Garamond', Georgia, serif",
-      titleLineHeight: 52,
-      introFont: "italic 22px 'Cormorant Garamond', Georgia, serif",
-      introLineHeight: 32,
+      fontSize: 38,
+      lineHeight: 58,
+      stanzaGap: 44,
+      titleFont: "600 56px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 68,
+      introFont: "italic 30px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 44,
     };
   } else {
     return {
-      fontSize: 23,
-      lineHeight: 38,
-      stanzaGap: 26,
-      titleFont: "600 42px 'Cormorant Garamond', Georgia, serif",
-      titleLineHeight: 50,
-      introFont: "italic 21px 'Cormorant Garamond', Georgia, serif",
-      introLineHeight: 30,
+      fontSize: 35,
+      lineHeight: 54,
+      stanzaGap: 40,
+      titleFont: "600 52px 'Cormorant Garamond', Georgia, serif",
+      titleLineHeight: 64,
+      introFont: "italic 28px 'Cormorant Garamond', Georgia, serif",
+      introLineHeight: 40,
     };
   }
 }
@@ -328,6 +327,7 @@ export function buildSlidePlan(poem, formatKey = "post", ctx = null) {
           totalSlides: 1,
           isFirst: true,
           isLast: true,
+          isCover: false,
           stanzas: wrappedStanzas,
           bodyStartY: slide1BodyStartY,
           availableHeight: singleSlideCapacity,
@@ -337,57 +337,29 @@ export function buildSlidePlan(poem, formatKey = "post", ctx = null) {
     };
   }
 
-  // 2. Multi-slide pagination
-  const slides = [];
-  let remainingStanzas = [...wrappedStanzas];
-
-  // Pack Slide 1
-  const slide1Stanzas = [];
-  let curSlide1Height = 0;
-
-  while (remainingStanzas.length > 0) {
-    const nextStanza = remainingStanzas[0];
-    const addedHeight = slide1Stanzas.length === 0 ? nextStanza.height : typo.stanzaGap + nextStanza.height;
-    if (curSlide1Height + addedHeight <= slide1MultiCapacity) {
-      slide1Stanzas.push(remainingStanzas.shift());
-      curSlide1Height += addedHeight;
-    } else {
-      if (slide1Stanzas.length === 0) {
-        // Fallback for an unusually tall single stanza that exceeds Slide 1
-        const maxLines = Math.max(1, Math.floor(slide1MultiCapacity / typo.lineHeight));
-        const firstPart = nextStanza.lines.slice(0, maxLines);
-        const rest = nextStanza.lines.slice(maxLines);
-        slide1Stanzas.push({ lines: firstPart, height: firstPart.length * typo.lineHeight });
-        curSlide1Height = firstPart.length * typo.lineHeight;
-        if (rest.length > 0) {
-          remainingStanzas[0] = { lines: rest, height: rest.length * typo.lineHeight };
-        } else {
-          remainingStanzas.shift();
-        }
-      }
-      break;
-    }
-  }
-
-  slides.push({
+  // 2. Multi-slide pagination with Cover Slide
+  const coverSlide = {
     slideNumber: 1,
     isFirst: true,
     isLast: false,
-    stanzas: slide1Stanzas,
-    bodyStartY: slide1BodyStartY,
-    availableHeight: slide1MultiCapacity,
-    stanzasHeight: curSlide1Height,
-  });
+    isCover: true,
+    stanzas: [],
+    bodyStartY: 0,
+    availableHeight: 0,
+    stanzasHeight: 0,
+  };
 
-  // Pack continuation slides (Slides 2..N)
+  const contentSlides = [];
+  let remainingStanzas = [...wrappedStanzas];
+
   while (remainingStanzas.length > 0) {
     const candidateRemainingHeight = calculateStanzasHeight(remainingStanzas, typo.lineHeight, typo.stanzaGap);
     if (candidateRemainingHeight <= lastSlideCapacity) {
-      // All remaining stanzas fit onto this final slide
-      slides.push({
-        slideNumber: slides.length + 1,
+      // All remaining stanzas fit onto this final content slide
+      contentSlides.push({
         isFirst: false,
         isLast: true,
+        isCover: false,
         stanzas: [...remainingStanzas],
         bodyStartY: contBodyStartY,
         availableHeight: lastSlideCapacity,
@@ -421,10 +393,10 @@ export function buildSlidePlan(poem, formatKey = "post", ctx = null) {
         }
       }
 
-      slides.push({
-        slideNumber: slides.length + 1,
+      contentSlides.push({
         isFirst: false,
         isLast: false,
+        isCover: false,
         stanzas: slideStanzas,
         bodyStartY: contBodyStartY,
         availableHeight: middleSlideCapacity,
@@ -433,22 +405,25 @@ export function buildSlidePlan(poem, formatKey = "post", ctx = null) {
     }
   }
 
-  if (slides.length > 0) {
-    slides[slides.length - 1].isLast = true;
+  if (contentSlides.length > 0) {
+    contentSlides[contentSlides.length - 1].isLast = true;
   }
-  const totalSlides = slides.length;
-  slides.forEach((s) => {
+
+  const allSlides = [coverSlide, ...contentSlides];
+  const totalSlides = allSlides.length;
+  allSlides.forEach((s, idx) => {
+    s.slideNumber = idx + 1;
     s.totalSlides = totalSlides;
   });
 
   return {
     format,
     slideCount: totalSlides,
-    isMultiSlide: totalSlides > 1,
+    isMultiSlide: true,
     typo,
     titleLines,
     introLines,
-    slides,
+    slides: allSlides,
   };
 }
 
@@ -493,6 +468,253 @@ function drawGardeniaWatermark(ctx, palette, paths, offsetX, offsetY, scale, rot
     ctx.stroke(new Path2D(paths[i]));
   }
   ctx.restore();
+}
+
+/**
+ * Botanical Swipe Prompt Indicator (Canvas-drawn)
+ */
+function drawSwipeIndicator(ctx, centerX, centerY, palette, slide) {
+  ctx.save();
+
+  // Decorative top divider line for the swipe prompt
+  ctx.strokeStyle = palette.footerDivider;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 80, centerY - 46);
+  ctx.lineTo(centerX + 80, centerY - 46);
+  ctx.stroke();
+
+  // Botanical diamond accent on divider
+  ctx.fillStyle = palette.dividerEmblem;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - 46 - 4);
+  ctx.lineTo(centerX + 4, centerY - 46);
+  ctx.lineTo(centerX, centerY - 46 + 4);
+  ctx.lineTo(centerX - 4, centerY - 46);
+  ctx.closePath();
+  ctx.fill();
+
+  // Swipe Action Graphics (Touch origin, directional arrow & chevrons)
+  const iconY = centerY - 10;
+  ctx.strokeStyle = palette.headerBrand;
+  ctx.fillStyle = palette.headerBrand;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Touch point (origin)
+  const touchX = centerX - 36;
+  ctx.beginPath();
+  ctx.arc(touchX, iconY, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Touch ripple arc behind
+  ctx.beginPath();
+  ctx.arc(touchX - 4, iconY, 9, Math.PI * 0.7, Math.PI * 1.3);
+  ctx.stroke();
+
+  // Motion arrow sweeping to right
+  ctx.beginPath();
+  ctx.moveTo(touchX + 6, iconY);
+  ctx.lineTo(centerX + 16, iconY);
+  ctx.stroke();
+
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(centerX + 9, iconY - 6);
+  ctx.lineTo(centerX + 17, iconY);
+  ctx.lineTo(centerX + 9, iconY + 6);
+  ctx.stroke();
+
+  // Dual forward chevrons »
+  ctx.beginPath();
+  ctx.moveTo(centerX + 26, iconY - 6);
+  ctx.lineTo(centerX + 33, iconY);
+  ctx.lineTo(centerX + 26, iconY + 6);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(centerX + 37, iconY - 6);
+  ctx.lineTo(centerX + 44, iconY);
+  ctx.lineTo(centerX + 37, iconY + 6);
+  ctx.stroke();
+
+  // "SWIPE TO READ" Label
+  ctx.textAlign = "center";
+  ctx.fillStyle = palette.title;
+  ctx.font = "600 15px sans-serif";
+  ctx.fillText("SWIPE TO READ", centerX, centerY + 24);
+
+  // Slide carousel indicator
+  ctx.fillStyle = palette.headerMeta;
+  ctx.font = "14px sans-serif";
+  ctx.fillText(`·  1 / ${slide.totalSlides}  ·`, centerX, centerY + 48);
+
+  ctx.restore();
+}
+
+/**
+ * Dedicated Cover Slide Renderer for Multi-Slide Collections
+ */
+function renderCoverSlide(canvas, slide, plan, poem, palette) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const { width, height, headerTop, footerBottom } = plan.format;
+
+  canvas.width = width;
+  canvas.height = height;
+
+  // 1. Base parchment wash
+  ctx.fillStyle = palette.bgBase;
+  ctx.fillRect(0, 0, width, height);
+
+  const grad = ctx.createRadialGradient(
+    width / 2,
+    height * 0.35,
+    60,
+    width / 2,
+    height / 2,
+    Math.max(width, height) * 0.65
+  );
+  grad.addColorStop(0, palette.gradCenter);
+  grad.addColorStop(1, palette.gradEdge);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. Botanical watermarks in corners
+  drawGardeniaWatermark(ctx, palette, TOP_RIGHT_MOTIF_PATHS, width - 420, -10, 0.88, 0.08);
+  drawGardeniaWatermark(ctx, palette, BOTTOM_LEFT_MOTIF_PATHS, -20, height - 420, 0.85, -0.1);
+
+  // 3. Double frame & corner accents
+  ctx.strokeStyle = palette.borderOuter;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(48, 48, width - 96, height - 96);
+
+  ctx.strokeStyle = palette.borderInner;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(58, 58, width - 116, height - 116);
+
+  const drawCornerDot = (x, y) => {
+    ctx.fillStyle = palette.cornerDot;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  drawCornerDot(58, 58);
+  drawCornerDot(width - 58, 58);
+  drawCornerDot(58, height - 58);
+  drawCornerDot(width - 58, height - 58);
+
+  // 4. Rosette Colophon Emblem & Brand Header
+  if (typeof Path2D !== "undefined") {
+    ctx.save();
+    ctx.translate(width / 2 - 20, headerTop);
+    ctx.scale(0.40, 0.40);
+    ctx.globalAlpha = palette.isDark ? 0.70 : 0.60;
+    ctx.strokeStyle = palette.headerBrand;
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 0; i < GARDENIA_EMBLEM_PATHS.length; i++) {
+      ctx.stroke(new Path2D(GARDENIA_EMBLEM_PATHS[i]));
+    }
+    ctx.restore();
+  }
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = palette.headerBrand;
+  ctx.font = "italic 24px 'Cormorant Garamond', Georgia, serif";
+  ctx.fillText("Notes from a Wilted Gardenia", width / 2, headerTop + 64);
+
+  ctx.fillStyle = palette.headerMeta;
+  ctx.font = "13px sans-serif";
+  const dateStr = poem.publish_date ? `· ${poem.publish_date} ·` : "· Digital Leaf ·";
+  ctx.fillText(dateStr.toUpperCase(), width / 2, headerTop + 96);
+
+  // Divider Line with central botanical diamond
+  ctx.strokeStyle = palette.divider;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - 100, headerTop + 118);
+  ctx.lineTo(width / 2 - 14, headerTop + 118);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(width / 2 + 14, headerTop + 118);
+  ctx.lineTo(width / 2 + 100, headerTop + 118);
+  ctx.stroke();
+
+  ctx.fillStyle = palette.dividerEmblem;
+  ctx.beginPath();
+  ctx.moveTo(width / 2, headerTop + 118 - 5);
+  ctx.lineTo(width / 2 + 5, headerTop + 118);
+  ctx.lineTo(width / 2, headerTop + 118 + 5);
+  ctx.lineTo(width / 2 - 5, headerTop + 118);
+  ctx.closePath();
+  ctx.fill();
+
+  // 5. Title, Intro & Poet Attribution Block (Vertically balanced in middle zone)
+  const headerBottomY = headerTop + 145;
+  const swipeSectionY = height - (footerBottom + 70);
+  const availableMiddleHeight = swipeSectionY - headerBottomY;
+
+  const coverTitleFont = "600 64px 'Cormorant Garamond', Georgia, serif";
+  const coverTitleLineHeight = 76;
+  const coverTitleLines = wrapText(ctx, poem.name || "Untitled Note", plan.format.maxContentWidth, coverTitleFont);
+  const coverTitleHeight = coverTitleLines.length * coverTitleLineHeight;
+
+  const coverIntroFont = "italic 32px 'Cormorant Garamond', Georgia, serif";
+  const coverIntroLineHeight = 46;
+  const coverIntroLines = poem.intro
+    ? wrapText(ctx, `“${poem.intro}”`, plan.format.maxContentWidth - 80, coverIntroFont)
+    : [];
+  const coverIntroHeight = coverIntroLines.length > 0 ? coverIntroLines.length * coverIntroLineHeight : 0;
+
+  const authorFont = "italic 28px 'Cormorant Garamond', Georgia, serif";
+  const authorHeight = 40;
+
+  const introSpacing = coverIntroLines.length > 0 ? 34 : 0;
+  const authorSpacing = 36;
+  const totalContentHeight = coverTitleHeight + introSpacing + coverIntroHeight + authorSpacing + authorHeight;
+
+  let startY = headerBottomY + Math.max(30, Math.floor((availableMiddleHeight - totalContentHeight) * 0.44));
+
+  // Render Title
+  ctx.fillStyle = palette.title;
+  ctx.font = coverTitleFont;
+  coverTitleLines.forEach((line) => {
+    ctx.fillText(line, width / 2, startY);
+    startY += coverTitleLineHeight;
+  });
+
+  // Render Intro if present
+  if (coverIntroLines.length > 0) {
+    startY += 16;
+    ctx.fillStyle = palette.dividerEmblem;
+    ctx.beginPath();
+    ctx.arc(width / 2, startY - 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = palette.intro;
+    ctx.font = coverIntroFont;
+    coverIntroLines.forEach((line) => {
+      ctx.fillText(line, width / 2, startY + 16);
+      startY += coverIntroLineHeight;
+    });
+    startY += 20;
+  } else {
+    startY += 20;
+  }
+
+  // Render Poet Attribution
+  ctx.fillStyle = palette.attribution;
+  ctx.font = authorFont;
+  const authorName = poem.author || DEFAULT_AUTHOR;
+  ctx.fillText(`— ${authorName}`, width / 2, startY);
+
+  // 6. Swipe Prompt Section (Bottom)
+  drawSwipeIndicator(ctx, width / 2, swipeSectionY, palette, slide);
 }
 
 /**
@@ -618,17 +840,21 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
       });
     }
   } else {
-    // Minimal brand header on continuation slides
+    // Running header on continuation slides
     ctx.textAlign = "center";
     ctx.fillStyle = palette.headerBrand;
-    ctx.font = "italic 20px 'Cormorant Garamond', Georgia, serif";
-    ctx.fillText("Notes from a Wilted Gardenia", width / 2, contHeaderTop);
+    ctx.font = "italic 22px 'Cormorant Garamond', Georgia, serif";
+    const runningHeader = poem.name
+      ? (poem.name.length > 40 ? poem.name.slice(0, 38) + "…" : poem.name)
+      : "Notes from a Wilted Gardenia";
+    ctx.fillText(runningHeader, width / 2, contHeaderTop);
 
+    const titleWidth = Math.min(280, Math.max(110, ctx.measureText(runningHeader).width + 30));
     ctx.strokeStyle = palette.divider;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(width / 2 - 55, contHeaderTop + 18);
-    ctx.lineTo(width / 2 + 55, contHeaderTop + 18);
+    ctx.moveTo(width / 2 - titleWidth / 2, contHeaderTop + 18);
+    ctx.lineTo(width / 2 + titleWidth / 2, contHeaderTop + 18);
     ctx.stroke();
   }
 
@@ -656,9 +882,9 @@ function renderCardSlide(canvas, slide, plan, poem, palette) {
   // 6. Footer & attribution
   if (slide.isLast) {
     // Poet Attribution
-    curY += 36;
+    curY += Math.max(34, plan.typo.stanzaGap);
     ctx.fillStyle = palette.attribution;
-    ctx.font = "italic 25px 'Cormorant Garamond', Georgia, serif";
+    ctx.font = `italic ${Math.max(26, plan.typo.fontSize)}px 'Cormorant Garamond', Georgia, serif`;
     const authorName = poem.author || DEFAULT_AUTHOR;
     ctx.fillText(`— ${authorName}`, width / 2, curY);
 
@@ -750,46 +976,49 @@ export async function exportPoemImage(poem, options = {}) {
           resolve(false);
           return;
         }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.download = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}.png`;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        triggerFileDownload(blob, `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}.png`);
         resolve(true);
       }, "image/png");
     });
   }
 
-  // 2. Multi-slide long-form poem: package into a ZIP
-  const zip = new JSZip();
-
+  // 2. Multi-slide long-form poem: download each slide sequentially as PNG
   for (let i = 0; i < plan.slides.length; i++) {
     const slide = plan.slides[i];
     const canvas = document.createElement("canvas");
-    renderCardSlide(canvas, slide, plan, poem, palette);
+    if (slide.isCover) {
+      renderCoverSlide(canvas, slide, plan, poem, palette);
+    } else {
+      renderCardSlide(canvas, slide, plan, poem, palette);
+    }
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     if (blob) {
       const slideIndexStr = String(i + 1).padStart(2, "0");
       const filename = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}-${slideIndexStr}.png`;
-      zip.file(filename, blob);
+      if (i > 0) {
+        // Small delay (300ms) between downloads to allow browser multi-download triggering
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      triggerFileDownload(blob, filename);
     }
   }
 
-  const zipBlob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(zipBlob);
+  return true;
+}
+
+/**
+ * Triggers a native file download from a Blob
+ */
+function triggerFileDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.download = `wilted-gardenia-${safeTitle}${themeSuffix}${formatSuffix}-cards.zip`;
+  link.download = filename;
   link.href = url;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-
-  return true;
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 
